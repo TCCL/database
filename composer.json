@@ -1,0 +1,19 @@
+{
+    "name": "tccl/database",
+    "description": "A simple PDO wrapper to eliminate DB connection boilerplate",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Roger Gee",
+            "email": "roger.gee@tulsalibrary.org"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "TCCL\\Database\\": "lib"
+        }
+    }
+}

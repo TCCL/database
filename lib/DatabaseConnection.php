@@ -34,7 +34,7 @@ class DatabaseConnection {
      */
     public function __construct(/* $keys ... */) {
         $keys = func_get_args();
-        if (count($keys < 1)) {
+        if (count($keys) < 1) {
             throw new Exception(
                 __METHOD__.': list of keys must contain at least 1 key');
         }
