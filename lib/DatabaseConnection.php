@@ -147,6 +147,18 @@ class DatabaseConnection {
     }
 
     /**
+     * Wraps PDO::prepare().
+     *
+     * @param string $query
+     *  The SQL string
+     *
+     * @return PDOStatement
+     */
+    public function prepare($query) {
+        return $this->pdo->prepare($query);
+    }
+
+    /**
      * Gets the underlying PDO backing object.
      *
      * @return PDO
