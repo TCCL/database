@@ -25,8 +25,17 @@ class DatabaseConnection {
 
     /**
      * The PDO object managing the database connection.
+     *
+     * @var PDO
      */
     private $pdo;
+
+    /**
+     * A counter for counting transactions.
+     *
+     * @var int
+     */
+    private $transactionRef = 0;
 
     /**
      * Initializes the backing PDO object. All parameters are forwarded to the
@@ -170,5 +179,25 @@ class DatabaseConnection {
      */
     public function getPDO() {
         return $this->pdo;
+    }
+
+    /**
+     * Wraps PDO::beginTransaction() in a such a way that transactions are
+     * counted and may be nested.
+     */
+    public function beginTransaction() {
+        if (++$this->transactionRef == 1) {
+            $this->pdo->beginTransaction();
+        }
+    }
+
+    /**
+     * Wraps PDO::commit() in such a way that transactions are counted and may
+     * be nested.
+     */
+    public function endTransaction() {
+        if (--$this->transactionRef == 0) {
+            $this->pdo->commit();
+        }
     }
 }
