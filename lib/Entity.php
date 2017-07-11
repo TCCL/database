@@ -75,12 +75,15 @@ abstract class Entity {
     private $fetchState = false;
 
     /**
+     * Determines whether the entity is expected to be created or updated.
+     *
+     * @var bool
+     */
+    private $create;
+
+    /**
      * Overloads for special handlers.
      */
-
-    public function __destruct() {
-        $this->doCommit();
-    }
 
     public function __get($propertyName) {
         $this->doFetch();
@@ -107,13 +110,111 @@ abstract class Entity {
         return isset($this->props[$name]) && isset($this->fields[$this->props[$name]]);
     }
 
-    protected function __construct(DatabaseConnection $conn,$table,array $keys) {
+    public function exists() {
+        $this->doFetch();
+        return is_array($this->fields);
+    }
+
+    /**
+     * Commit any pending changes to the database. This must be done explicitly.
+     */
+    public function commit() {
+        if ($this->create) {
+            $values = [];
+
+            // Process any specified updates as field inserts.
+            if (isset($this->updates)) {
+                foreach ($this->updates as $key => &$value) {
+                    $value = $this->fields[$key];
+                    $values[] = $this->fields[$key];
+                }
+                unset($value);
+            }
+
+            // Add any non-null keys to the list of inserts. We'll assume null
+            // keys are defaulted or auto-incremented in some way by the DB
+            // engine.
+            foreach ($this->keys as $key => $value) {
+                if (!is_null($value)) {
+                    $this->updates[$key] = true;
+                    $values[] = $value;
+                }
+            }
+
+            // Abort operation if no inserts are available.
+            if (!isset($this->updates)) {
+                return;
+            }
+
+            // Build the query.
+            $fields = implode(',',array_keys($this->updates));
+            $prep = '?' . str_repeat(',?',count($this->updates)-1);
+            $query = "INSERT INTO $this->table ($fields) VALUES ($prep)";
+        }
+        else {
+            // Abort operation if no updates are available.
+            if (!isset($this->updates)) {
+                return;
+            }
+
+            // Process the set of updates.
+            $keyCondition = $this->getKeyString($values);
+            foreach ($this->updates as $key => &$value) {
+                $value = $this->fields[$key];
+                array_unshift($values,$this->fields[$key]);
+            }
+
+            // Build the query.
+            $fields = implode(',',array_map(function($x){ return "$x = ?"; },
+                                            array_keys($this->updates)));
+            $query = "UPDATE $this->table SET $fields WHERE $keyCondition LIMIT 1";
+        }
+
+        $this->conn->query($query,$values);
+        unset($this->updates);
+    }
+
+    /**
+     * Creates a new Entity instance. This must be called by derive classes in
+     * order for the object to function properly.
+     *
+     * @param DatabaseConnection $conn
+     *  The database connection object to use when making queries for the
+     *  entity.
+     * @param string $table
+     *  The database table that represents the entity.
+     * @param array $keys
+     *  The keys that identify the specific entity. This is an associative array
+     *  mapping key field name(s) to the expected value(s).
+     * @param bool $create
+     *  If true then the object will attempt to commit the entity as a new
+     *  entity.
+     */
+    protected function __construct(DatabaseConnection $conn,$table,array $keys,$create = false) {
         $this->conn = $conn;
         $this->table = $table;
         $this->keys = $keys;
+        $this->create = $create;
     }
 
-    protected function registerField($field,$propertyName,$default = null) {
+    /**
+     * Registers a field with the object. This should be called by the derived
+     * class for the fields it wants to include as a part of its interface. Each
+     * field is provided as a property of the object.
+     *
+     * @param string $field
+     *  The field name corresponding to the database field name.
+     * @param string $propertyName
+     *  The name of the property. This may be different than the verbatim
+     *  database table field name if specified. If empty string or null then the
+     *  property name will be the same as the database field name.
+     * @param mixed $default
+     *  The default value to use for the property.
+     */
+    protected function registerField($field,$propertyName = null,$default = null) {
+        if (empty($propertyName)) {
+            $propertyName = $field;
+        }
         if (property_exists($this,$propertyName)) {
             trigger_error("Cannot register field '$propertyName'.",E_USER_ERROR);
             return;
@@ -121,8 +222,23 @@ abstract class Entity {
 
         $this->fields[$field] = $default;
         $this->props[$propertyName] = $field;
+
+        // If a non-null default value is specified then set the field to
+        // update. If a new entity is committed then it will assume the default.
+        if (!is_null($default)) {
+            $this->updates[$field] = true;
+        }
     }
 
+    /**
+     * Gets the string representing the WHERE key bind condition in the SQL
+     * query. This is just a convenience wrapper.
+     *
+     * @param array &$values
+     *  The list of values for the key expression.
+     *
+     * @return string
+     */
     private function getKeyString(&$values) {
         $keys = array_keys($this->keys);
         $query = implode(' AND ',array_map(function($x){ return "$x = ?"; },$keys));
@@ -130,6 +246,10 @@ abstract class Entity {
         return $query;
     }
 
+    /**
+     * Performs the fetch operation. This overwrites all field values currently
+     * available.
+     */
     private function doFetch() {
         if (!$this->fetchState) {
             $keyCondition = $this->getKeyString($values);
@@ -140,23 +260,6 @@ abstract class Entity {
 
             $this->fields = $stmt->fetch(PDO::FETCH_ASSOC);
             $this->fetchState = true;
-        }
-    }
-
-    private function doCommit() {
-        if (isset($this->updates)) {
-            $keyCondition = $this->getKeyString($values);
-            foreach ($this->updates as $key => &$value) {
-                $value = $this->fields[$key];
-                array_unshift($values,$this->fields[$key]);
-            }
-            $fields = implode(',',array_map(function($x){ return "$x = ?"; },
-                                            array_keys($this->updates)));
-
-            $query = "UPDATE $this->table SET $fields WHERE $keyCondition LIMIT 1";
-            $this->conn->query($query,$values);
-
-            unset($this->updates);
         }
     }
 }
