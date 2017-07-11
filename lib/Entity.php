@@ -177,7 +177,22 @@ abstract class Entity {
             $query = "UPDATE $this->table SET $fields WHERE $keyCondition LIMIT 1";
         }
 
-        $this->conn->query($query,$values);
+        $this->conn->beginTransaction();
+        $stmt = $this->conn->query($query,$values);
+        if ($stmt->rowCount() < 1) {
+            // Attempt to create the entity if we weren't already.
+            if (!$this->create) {
+                // Attempt to create the entity.
+                $this->create = true;
+                $this->commit();
+                $this->conn->endTransaction();
+                return;
+            }
+
+            throw new Exception(__METHOD__.': failed to commit entity');
+        }
+
+        $this->conn->endTransaction();
         unset($this->updates);
     }
 
@@ -194,14 +209,23 @@ abstract class Entity {
      *  The keys that identify the specific entity. This is an associative array
      *  mapping key field name(s) to the expected value(s).
      * @param bool $create
-     *  If true then the object will attempt to commit the entity as a new
-     *  entity.
+     *  If true then the object will attempt to force commit the entity as a new
+     *  entity. Otherwise the entity is only created if it was determined to not
+     *  exist.
      */
     protected function __construct(DatabaseConnection $conn,$table,array $keys,$create = false) {
         $this->conn = $conn;
         $this->table = $table;
         $this->keys = $keys;
-        $this->create = $create;
+
+        // Force create if specified or if null appears as one of the key
+        // values.
+        if (in_array(null,array_values($keys))) {
+            $this->create = true;
+        }
+        else {
+            $this->create = $create;
+        }
     }
 
     /**
@@ -232,13 +256,6 @@ abstract class Entity {
 
         $this->fields[$field] = $default;
         $this->props[$propertyName] = $field;
-
-        // If a non-null default value is specified then set the field to
-        // update. If a new entity is committed then it will assume the default.
-        if (!is_null($default)) {
-            $this->updates[$field] = true;
-        }
-
         if (is_callable($filter)) {
             $this->filters[$field] = $filter;
         }
@@ -275,10 +292,18 @@ abstract class Entity {
             $this->fields = $stmt->fetch(PDO::FETCH_ASSOC);
             $this->fetchState = true;
 
-            // Apply filters to the fetched values.
-            foreach ($this->fields as $key => &$value) {
-                if (isset($this->filters[$key])) {
-                    $value = $this->filters[$key]($value);
+            // If we didn't get any results, we can assume the entity doesn't
+            // exist. In this case we'll want to enter create mode so that any
+            // future commit won't attempt an UPDATE but skip to an INSERT.
+            if (!is_array($this->fields)) {
+                $this->create = true;
+            }
+            else {
+                // Apply filters to the fetched values.
+                foreach ($this->fields as $key => &$value) {
+                    if (isset($this->filters[$key])) {
+                        $value = $this->filters[$key]($value);
+                    }
                 }
             }
         }
