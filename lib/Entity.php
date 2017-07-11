@@ -67,6 +67,13 @@ abstract class Entity {
     private $updates;
 
     /**
+     * The set of filters to apply (if any) to values fetched from the database.
+     *
+     * @var array
+     */
+    private $filters;
+
+    /**
      * Determines whether the fields have been fetched. Typically this is only
      * done once in the object's lifetime unless it is invalidated.
      *
@@ -210,8 +217,11 @@ abstract class Entity {
      *  property name will be the same as the database field name.
      * @param mixed $default
      *  The default value to use for the property.
+     * @param callable $filter
+     *  If a callable, then the field is filtered through the callback when it
+     *  is read. This does not effect the value when it is committed.
      */
-    protected function registerField($field,$propertyName = null,$default = null) {
+    protected function registerField($field,$propertyName = null,$default = null,$filter = null) {
         if (empty($propertyName)) {
             $propertyName = $field;
         }
@@ -227,6 +237,10 @@ abstract class Entity {
         // update. If a new entity is committed then it will assume the default.
         if (!is_null($default)) {
             $this->updates[$field] = true;
+        }
+
+        if (is_callable($filter)) {
+            $this->filters[$field] = $filter;
         }
     }
 
@@ -260,6 +274,13 @@ abstract class Entity {
 
             $this->fields = $stmt->fetch(PDO::FETCH_ASSOC);
             $this->fetchState = true;
+
+            // Apply filters to the fetched values.
+            foreach ($this->fields as $key => &$value) {
+                if (isset($this->filters[$key])) {
+                    $value = $this->filters[$key]($value);
+                }
+            }
         }
     }
 }
