@@ -1,8 +1,11 @@
-database - v1.0.0
+database - v1.1.0
 --------------------------------------------------------------------------------
 This library provides a really simple wrapper above PDO. It also eliminates
 boilerplate associated with connecting to the database. It expects database
 credentials to be managed in $GLOBALS.
+
+The library also provides a simple Entity abstract class for wrapping UPDATE and
+INSERT operations for single entities.
 
 Primary authors:
 
