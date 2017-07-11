@@ -11,6 +11,11 @@ namespace TCCL\Database;
 use PDO;
 use Exception;
 
+/**
+ * DatabaseConnection
+ *
+ * Represents a database connection. This provides a simple wrapper above PDO.
+ */
 class DatabaseConnection {
     /**
      * The map of active database connections in the application. We'll use this
