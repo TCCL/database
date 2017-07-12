@@ -114,7 +114,7 @@ abstract class Entity {
 
     public function __isset($field) {
         // Make sure the property is registered and it's value is set.
-        return isset($this->props[$name]) && isset($this->fields[$this->props[$name]]);
+        return isset($this->props[$field]) && isset($this->fields[$this->props[$field]]);
     }
 
     public function exists() {
