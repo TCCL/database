@@ -212,12 +212,12 @@ abstract class Entity {
                 return;
             }
 
-            // Process the set of updates.
-            $keyCondition = $this->getKeyString($values);
-            foreach ($this->updates as $key => &$value) {
-                $value = $this->fields[$key];
-                array_unshift($values,$this->fields[$key]);
+            // Process the set of updates and prepared values for the query.
+            foreach ($this->updates as $key => $_) {
+                $values[] = $this->fields[$key];
             }
+            $keyCondition = $this->getKeyString($keyvals);
+            $values = array_merge($values,$keyvals);
 
             // Build the query.
             $fields = implode(',',array_map(function($x){ return "$x = ?"; },
