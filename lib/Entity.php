@@ -82,7 +82,9 @@ abstract class Entity {
     private $fetchState = false;
 
     /**
-     * Determines whether the entity is expected to be created or updated.
+     * Determines whether the entity is expected to be created or updated. This
+     * effectively stores whether the entity exists or not after doing a
+     * doFetch() operation.
      *
      * @var bool
      */
@@ -117,9 +119,54 @@ abstract class Entity {
         return isset($this->props[$field]) && isset($this->fields[$this->props[$field]]);
     }
 
+    /**
+     * Determines if the entity exists.
+     *
+     * @return bool
+     */
     public function exists() {
         $this->doFetch();
-        return is_array($this->fields);
+        return !$this->create;
+    }
+
+    /**
+     * Gets the complete set of fields representing the entity.
+     *
+     * @param bool $userPropertyNames
+     *  If true then the keys in the array are the property names instead of the
+     *  database table names.
+     *
+     * @return array
+     *  An associative array mapping field names to field values.
+     */
+    public function getFields($usePropertyNames = true) {
+        $this->doFetch();
+        if ($usePropertyNames) {
+            $result = [];
+            foreach ($this->props as $propName => $fieldName) {
+                $result[$propName] = $this->fields[$fieldName];
+            }
+            return $result;
+        }
+
+        return $this->fields;
+    }
+
+    /**
+     * Gets the complete set of field names for the entity.
+     *
+     * @param bool $userPropertyNames
+     *  If true then the keys in the array are the property names instead of the
+     *  database table names.
+     *
+     * @return array
+     *  An indexed array containing the field names.
+     */
+    public function getFieldNames($usePropertyNames = true) {
+        if ($usePropertyNames) {
+            return array_keys($this->props);
+        }
+        return array_values($this->props);
     }
 
     /**
@@ -157,6 +204,7 @@ abstract class Entity {
             $fields = implode(',',array_keys($this->updates));
             $prep = '?' . str_repeat(',?',count($this->updates)-1);
             $query = "INSERT INTO $this->table ($fields) VALUES ($prep)";
+            $this->fetchState = false;
         }
         else {
             // Abort operation if no updates are available.
@@ -289,22 +337,24 @@ abstract class Entity {
             $query = "SELECT $fields FROM $this->table WHERE $keyCondition LIMIT 1";
             $stmt = $this->conn->query($query,$values);
 
-            $this->fields = $stmt->fetch(PDO::FETCH_ASSOC);
+            $newfields = $stmt->fetch(PDO::FETCH_ASSOC);
             $this->fetchState = true;
 
             // If we didn't get any results, we can assume the entity doesn't
             // exist. In this case we'll want to enter create mode so that any
             // future commit won't attempt an UPDATE but skip to an INSERT.
-            if (!is_array($this->fields)) {
+            if (!is_array($newfields)) {
                 $this->create = true;
             }
             else {
                 // Apply filters to the fetched values.
+                $this->fields = $newfields;
                 foreach ($this->fields as $key => &$value) {
                     if (isset($this->filters[$key])) {
                         $value = $this->filters[$key]($value);
                     }
                 }
+                $this->create = false;
             }
         }
     }
