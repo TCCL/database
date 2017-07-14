@@ -108,14 +108,16 @@ abstract class Entity {
             $fieldName = $this->props[$propertyName];
             $this->fields[$fieldName] = $value;
             $this->updates[$fieldName] = true;
+            $this->fetchState = true;
             return;
         }
 
-        trigger_error("Undefined entity property: $propertyName",E_USER_NOTICE); 
+        trigger_error("Undefined entity property: $propertyName",E_USER_NOTICE);
     }
 
     public function __isset($field) {
         // Make sure the property is registered and it's value is set.
+        $this->doFetch();
         return isset($this->props[$field]) && isset($this->fields[$this->props[$field]]);
     }
 
