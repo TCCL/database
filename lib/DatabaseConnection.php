@@ -24,11 +24,11 @@ class DatabaseConnection {
     static private $pdomap = array();
 
     /**
-     * The PDO object managing the database connection.
+     * The key into $pdomap that gets the PDO instance.
      *
-     * @var PDO
+     * @var string
      */
-    private $pdo;
+    private $key;
 
     /**
      * A counter for counting transactions.
@@ -52,9 +52,9 @@ class DatabaseConnection {
             throw new Exception(
                 __METHOD__.': list of keys must contain at least 1 key');
         }
-        $key = $keys[count($keys)-1];
+        $this->key = implode(':',$keys);
 
-        if (!isset(self::$pdomap[$key])) {
+        if (!isset(self::$pdomap[$this->key])) {
             // Find the bucket based on the subkeys.
             $bucket = $GLOBALS;
             foreach ($keys as $k) {
@@ -65,17 +65,7 @@ class DatabaseConnection {
                 $bucket = $bucket[$k];
             }
 
-            // Extract arguments and create PDO.
-            @list($dsn,$user,$passwd,$options) = $bucket;
-            $pdo = new PDO($dsn,$user,$passwd,$options);
-
-            // Store connection in map and assign.
-            self::$pdomap[$key] = $pdo;
-            $this->pdo = $pdo;
-        }
-        else {
-            // Connection already exists: extract only.
-            $this->pdo = self::$pdomap[$key];
+            self::$pdomap[$this->key] = $bucket;
         }
     }
 
@@ -102,34 +92,34 @@ class DatabaseConnection {
         if (is_array($args)) {
             // If the 'args' argument is an array, then use its contents as
             // parameters to the prepared statement.
-            $result = $this->pdo->prepare($query);
+            $result = $this->pdo()->prepare($query);
             if ($result !== false) {
                 if ($result->execute($args) === false) {
                     $error = $result->errorInfo();
                 }
             }
             else {
-                $error = $this->pdo->errorInfo();
+                $error = $this->pdo()->errorInfo();
             }
         }
         else if (!is_null($args)) {
             // Treat arguments after the query string as parameters to the
             // prepared statement.
             $args = array_slice(func_get_args(),1);
-            $result = $this->pdo->prepare($query);
+            $result = $this->pdo()->prepare($query);
             if ($result !== false) {
                 if ($result->execute($args) === false) {
                     $error = $result->errorInfo();
                 }
             }
             else {
-                $error = $this->pdo->errorInfo();
+                $error = $this->pdo()->errorInfo();
             }
         }
         else {
-            $result = $this->pdo->query($query);
+            $result = $this->pdo()->query($query);
             if ($result === false) {
-                $error = $this->pdo->errorInfo();
+                $error = $this->pdo()->errorInfo();
             }
         }
 
@@ -150,9 +140,9 @@ class DatabaseConnection {
      * @return PDOStatement
      */
     public function rawQuery($query) {
-        $stmt = $this->pdo->query($query);
+        $stmt = $this->pdo()->query($query);
         if ($stmt === false) {
-            $error = $this->pdo->errorInfo();
+            $error = $this->pdo()->errorInfo();
             $message = is_null($error[2]) ? '' : ": {$error[2]}";
             throw new Exception(__METHOD__.": failed database query$message");            
         }
@@ -169,7 +159,7 @@ class DatabaseConnection {
      * @return PDOStatement
      */
     public function prepare($query) {
-        return $this->pdo->prepare($query);
+        return $this->pdo()->prepare($query);
     }
 
     /**
@@ -178,7 +168,7 @@ class DatabaseConnection {
      * @return PDO
      */
     public function getPDO() {
-        return $this->pdo;
+        return $this->pdo();
     }
 
     /**
@@ -187,7 +177,7 @@ class DatabaseConnection {
      */
     public function beginTransaction() {
         if (++$this->transactionRef == 1) {
-            $this->pdo->beginTransaction();
+            $this->pdo()->beginTransaction();
         }
     }
 
@@ -197,7 +187,29 @@ class DatabaseConnection {
      */
     public function endTransaction() {
         if (--$this->transactionRef == 0) {
-            $this->pdo->commit();
+            $this->pdo()->commit();
         }
+    }
+
+    /**
+     * Gets the PDO object for this instance.
+     *
+     * @return PDO
+     */
+    private function pdo() {
+        if (is_object(self::$pdomap[$this->key])) {
+            return self::$pdomap[$this->key];
+        }
+
+        $bucket = self::$pdomap[$this->key];
+
+        // Extract arguments and create PDO.
+        @list($dsn,$user,$passwd,$options) = $bucket;
+        $pdo = new PDO($dsn,$user,$passwd,$options);
+
+        // Store connection in map and assign.
+        self::$pdomap[$this->key] = $pdo;
+        return $pdo;
+
     }
 }
