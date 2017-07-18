@@ -172,6 +172,44 @@ abstract class Entity {
     }
 
     /**
+     * Sets the fields for the Entity. The Entity assumes the fields represent
+     * an existing entity.
+     *
+     * @param array $fields
+     *  The associative array of fields for the entity. This is cross-referenced
+     *  for keys.
+     */
+    final public function setFields(array $fields) {
+        // If the fields are set, we assume the entity exists and has been
+        // fetched.
+        $this->fetchState = true;
+        $this->create = false;
+
+        foreach ($fields as $key => $value) {
+            // Set key value if found.
+            if (array_key_exists($key,$this->keys)) {
+                $this->keys[$key] = $value;
+            }
+
+            // See if the key is a property name. If so then map it to its
+            // corresponding field name.
+            if (isset($this->props[$key])) {
+                $key = $this->props[$key];
+            }
+
+            // Set field value if found.
+            if (array_key_exists($key,$this->fields)) {
+                // See if we can first filter the value.
+                if (isset($this->filters[$key])) {
+                    $value = $this->filters[$key]($value);
+                }
+
+                $this->fields[$key] = $value;
+            }
+        }
+    }
+
+    /**
      * Commit any pending changes to the database. This must be done explicitly.
      */
     public function commit() {
@@ -261,7 +299,7 @@ abstract class Entity {
      * @param bool $create
      *  If true then the object will attempt to force commit the entity as a new
      *  entity. Otherwise the entity is only created if it was determined to not
-     *  exist.
+     *  exist and an attempt will be made to fetch fields.
      */
     protected function __construct(DatabaseConnection $conn,$table,array $keys,$create = false) {
         $this->conn = $conn;
@@ -284,7 +322,8 @@ abstract class Entity {
      * field is provided as a property of the object.
      *
      * @param string $field
-     *  The field name corresponding to the database field name.
+     *  The field name corresponding to the database field name. This *must* be
+     *  a field in the entity type's corresponding table.
      * @param string $propertyName
      *  The name of the property. This may be different than the verbatim
      *  database table field name if specified. If empty string or null then the
@@ -295,7 +334,7 @@ abstract class Entity {
      *  If a callable, then the field is filtered through the callback when it
      *  is read. This does not effect the value when it is committed.
      */
-    protected function registerField($field,$propertyName = null,$default = null,$filter = null) {
+    final protected function registerField($field,$propertyName = null,$default = null,$filter = null) {
         if (empty($propertyName)) {
             $propertyName = $field;
         }
@@ -311,6 +350,10 @@ abstract class Entity {
         }
     }
 
+    final protected function getKeys() {
+        return $this->keys;
+    }
+
     /**
      * Gets the string representing the WHERE key bind condition in the SQL
      * query. This is just a convenience wrapper.
@@ -320,11 +363,40 @@ abstract class Entity {
      *
      * @return string
      */
-    private function getKeyString(&$values) {
+    final protected function getKeyString(&$values) {
         $keys = array_keys($this->keys);
         $query = implode(' AND ',array_map(function($x){ return "$x = ?"; },$keys));
         $values = array_values($this->keys);
         return $query;
+    }
+
+    /**
+     * Gets the query used to fetch the entity fields. This may be overridden by
+     * derived classes to handle more complicated entity types.
+     *
+     * @param array &$values
+     *  The array of variables for the query statement.
+     *
+     * @return string
+     *  The query string
+     */
+    protected function getFetchQuery(array &$values) {
+        $keyCondition = $this->getKeyString($values);
+        $fields = implode(',',array_keys($this->fields));
+
+        $query = "SELECT $fields FROM $this->table WHERE $keyCondition LIMIT 1";
+        return $query;
+    }
+
+    /**
+     * Allows derived classes to process the fetch results. The default
+     * implementation does nothing.
+     *
+     * @param array &$fetches
+     *  The array of fetch results from the fetch query.
+     */
+    protected function processFetchResults(array &$fetches) {
+
     }
 
     /**
@@ -333,10 +405,8 @@ abstract class Entity {
      */
     private function doFetch() {
         if (!$this->fetchState) {
-            $keyCondition = $this->getKeyString($values);
-            $fields = implode(',',array_keys($this->fields));
-
-            $query = "SELECT $fields FROM $this->table WHERE $keyCondition LIMIT 1";
+            $values = [];
+            $query = $this->getFetchQuery($values);
             $stmt = $this->conn->query($query,$values);
 
             $newfields = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -349,14 +419,11 @@ abstract class Entity {
                 $this->create = true;
             }
             else {
-                // Apply filters to the fetched values.
-                $this->fields = $newfields;
-                foreach ($this->fields as $key => &$value) {
-                    if (isset($this->filters[$key])) {
-                        $value = $this->filters[$key]($value);
-                    }
-                }
-                $this->create = false;
+                // Allow derived functionality the chance to process the fields.
+                $this->processFetchResults($newfields);
+
+                // Update fields with new fetch results.
+                $this->setFields($newfields);
             }
         }
     }
