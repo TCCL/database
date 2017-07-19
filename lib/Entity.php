@@ -132,6 +132,24 @@ abstract class Entity {
     }
 
     /**
+     * Gets the database connection instance.
+     *
+     * @return DatabaseConnection
+     */
+    public function getConnection() {
+        return $this->conn;
+    }
+
+    /**
+     * Gets the table name for the Entity.
+     *
+     * @return string
+     */
+    public function getTable() {
+        return $this->table;
+    }
+
+    /**
      * Gets the complete set of fields representing the entity.
      *
      * @param bool $userPropertyNames
@@ -210,41 +228,67 @@ abstract class Entity {
     }
 
     /**
+     * Gets the list of inserts for the object. Such a list only exists if the
+     * object is in create mode.
+     *
+     * @param array &$values
+     *  Appends the values to insert to the specified array.
+     *
+     * @return array
+     *  Returns the list of insert fields as an associative array whose keys
+     *  represent the fields to insert.
+     */
+    public function getInserts(array &$values) {
+        if (!$this->create) {
+            return false;
+        }
+
+        // Process any specified updates as field inserts.
+        if (isset($this->updates)) {
+            foreach ($this->updates as $key => &$value) {
+                $value = $this->fields[$key];
+                $values[] = $this->fields[$key];
+            }
+            unset($value);
+        }
+        else {
+            return false;
+        }
+
+        // Add any non-null keys to the list of inserts. We'll assume null
+        // keys are defaulted or auto-incremented in some way by the DB
+        // engine.
+        foreach ($this->keys as $key => $value) {
+            if (!is_null($value) && !isset($this->updates[$key])) {
+                $this->updates[$key] = true;
+                $values[] = $value;
+            }
+        }
+
+        // Abort operation if no inserts are available.
+        if (!isset($this->updates)) {
+            return false;
+        }
+
+        return $this->updates;
+    }
+
+    /**
      * Commit any pending changes to the database. This must be done explicitly.
      */
     public function commit() {
         if ($this->create) {
+            // Get inserts information.
             $values = [];
-
-            // Process any specified updates as field inserts.
-            if (isset($this->updates)) {
-                foreach ($this->updates as $key => &$value) {
-                    $value = $this->fields[$key];
-                    $values[] = $this->fields[$key];
-                }
-                unset($value);
-            }
-
-            // Add any non-null keys to the list of inserts. We'll assume null
-            // keys are defaulted or auto-incremented in some way by the DB
-            // engine.
-            foreach ($this->keys as $key => $value) {
-                if (!is_null($value) && !isset($this->updates[$key])) {
-                    $this->updates[$key] = true;
-                    $values[] = $value;
-                }
-            }
-
-            // Abort operation if no inserts are available.
-            if (!isset($this->updates)) {
+            $inserts = $this->getInserts($values);
+            if ($inserts === false) {
                 return;
             }
 
             // Build the query.
-            $fields = implode(',',array_keys($this->updates));
-            $prep = '?' . str_repeat(',?',count($this->updates)-1);
+            $fields = implode(',',array_keys($inserts));
+            $prep = '?' . str_repeat(',?',count($inserts)-1);
             $query = "INSERT INTO $this->table ($fields) VALUES ($prep)";
-            $this->fetchState = false;
         }
         else {
             // Abort operation if no updates are available.
@@ -284,6 +328,9 @@ abstract class Entity {
         // with the name 'id'.
         if (array_key_exists('id',$this->keys) && is_null($this->keys['id'])) {
             $this->keys['id'] = $this->conn->lastInsertId();
+            if (array_key_exists('id',$this->fields)) {
+                $this->id = $this->keys['id'];
+            }
         }
 
         $this->conn->endTransaction();
