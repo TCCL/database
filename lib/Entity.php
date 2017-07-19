@@ -338,19 +338,18 @@ abstract class Entity {
         }
 
         // Perform the query.
-        $this->conn->beginTransaction();
         $stmt = $this->conn->query($query,$values);
         if ($stmt->rowCount() < 1) {
             // Attempt to create the entity if we weren't already.
-            if (!$this->create) {
+            if (!$this->create && !$this->updateOnly) {
                 // Attempt to create the entity.
                 $this->create = true;
                 $status = $this->commit();
-                $this->conn->endTransaction();
                 return $status;
             }
 
-            throw new Exception(__METHOD__.': failed to commit entity');
+            // Assume the entity was updated but had no changes.
+            return true;
         }
 
         // Handle insert ID updates. We only do this conventionally for keys
@@ -362,7 +361,6 @@ abstract class Entity {
             }
         }
 
-        $this->conn->endTransaction();
         unset($this->updates);
         return true;
     }
