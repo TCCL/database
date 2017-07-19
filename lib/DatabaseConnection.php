@@ -20,8 +20,17 @@ class DatabaseConnection {
     /**
      * The map of active database connections in the application. We'll use this
      * to prevent redundant connection.
+     *
+     * @var array
      */
     static private $pdomap = array();
+
+    /**
+     * The map of transaction counters in the application, one per connection.
+     *
+     * @var array
+     */
+    static private $transactionCounters = array();
 
     /**
      * The key into $pdomap that gets the PDO instance.
@@ -29,13 +38,6 @@ class DatabaseConnection {
      * @var string
      */
     private $key;
-
-    /**
-     * A counter for counting transactions.
-     *
-     * @var int
-     */
-    private $transactionRef = 0;
 
     /**
      * Initializes the backing PDO object. All parameters are forwarded to the
@@ -66,6 +68,7 @@ class DatabaseConnection {
             }
 
             self::$pdomap[$this->key] = $bucket;
+            self::$transactionCounters[$this->key] = 0;
         }
     }
 
@@ -176,8 +179,18 @@ class DatabaseConnection {
      * counted and may be nested.
      */
     public function beginTransaction() {
-        if (++$this->transactionRef == 1) {
+        if (++self::$transactionCounters[$this->key] == 1) {
             $this->pdo()->beginTransaction();
+        }
+    }
+
+    /**
+     * Wraps PDO::rollback(). This will pop out of all transaction frames.
+     */
+    public function rollback() {
+        if (self::$transactionCounters[$this->key] > 1) {
+            $this->pdo()->rollback();
+            self::$transactionCounters[$this->key] = 0;
         }
     }
 
@@ -186,7 +199,7 @@ class DatabaseConnection {
      * be nested.
      */
     public function endTransaction() {
-        if (--$this->transactionRef == 0) {
+        if (--self::$transactionCounters[$this->key] == 0) {
             $this->pdo()->commit();
         }
     }
