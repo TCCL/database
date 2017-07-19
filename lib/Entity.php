@@ -229,7 +229,7 @@ abstract class Entity {
             // keys are defaulted or auto-incremented in some way by the DB
             // engine.
             foreach ($this->keys as $key => $value) {
-                if (!is_null($value)) {
+                if (!is_null($value) && !isset($this->updates[$key])) {
                     $this->updates[$key] = true;
                     $values[] = $value;
                 }
@@ -278,6 +278,12 @@ abstract class Entity {
             }
 
             throw new Exception(__METHOD__.': failed to commit entity');
+        }
+
+        // Handle insert ID updates. We only do this conventionally for keys
+        // with the name 'id'.
+        if (array_key_exists('id',$this->keys) && is_null($this->keys['id'])) {
+            $this->keys['id'] = $this->conn->lastInsertId();
         }
 
         $this->conn->endTransaction();

@@ -192,6 +192,13 @@ class DatabaseConnection {
     }
 
     /**
+     * Wraps PDO::lastInsertId().
+     */
+    public function lastInsertId() {
+        return $this->pdo()->lastInsertId();
+    }
+
+    /**
      * Gets the PDO object for this instance.
      *
      * @return PDO
