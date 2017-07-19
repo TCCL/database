@@ -159,11 +159,15 @@ class EntityInsertSet implements ArrayAccess, Iterator {
      * Performs a single INSERT query to insert the set of objects. This
      * operation assumes that each entity has the same fields to update; the
      * query will fail otherwise.
+     *
+     * @return bool
+     *  Returns true if the insert was successful, false otherwise. Note that
+     *  false may be returned if there were no entities to commit.
      */
     public function commit() {
         // Make sure we have entities to insert.
         if (empty($this->ents)) {
-            return;
+            return false;
         }
 
         // Get set of inserts and values.
@@ -180,7 +184,7 @@ class EntityInsertSet implements ArrayAccess, Iterator {
 
         // Make sure there are some fields to insert.
         if (count($inserts) == 0) {
-            return;
+            return false;
         }
 
         // Get prep string for query.
@@ -191,5 +195,7 @@ class EntityInsertSet implements ArrayAccess, Iterator {
         $table = $this->ents[0]->getTable();
         $fields = implode(',',array_keys($inserts));
         $this->conn->query("INSERT INTO $table ($fields) VALUES $prepOuter",$values);
+
+        return true;
     }
 }

@@ -91,6 +91,14 @@ abstract class Entity {
     private $create;
 
     /**
+     * Determines whether the entity is expected to already exist. By default we
+     * don't care and will attempt to UPDATE or INSERT the entity as needed.
+     *
+     * @var bool
+     */
+    private $updateOnly = false;
+
+    /**
      * Overloads for special handlers.
      */
 
@@ -129,6 +137,16 @@ abstract class Entity {
     public function exists() {
         $this->doFetch();
         return !$this->create;
+    }
+
+    /**
+     * Sets the update-only state of the Entity.
+     *
+     * @param bool $state
+     *  The flag to set.
+     */
+    public function setUpdateOnly($state = true) {
+        $this->updateOnly = $state;
     }
 
     /**
@@ -275,14 +293,24 @@ abstract class Entity {
 
     /**
      * Commit any pending changes to the database. This must be done explicitly.
+     *
+     * @return bool
+     *  Returns true if the entity was successfully updated or created, false
+     *  otherwise. False may be returned if the entity had nothing to
+     *  insert/update.
      */
     public function commit() {
         if ($this->create) {
+            // If we can only update this entity then we fail.
+            if ($this->updateOnly) {
+                return false;
+            }
+
             // Get inserts information.
             $values = [];
             $inserts = $this->getInserts($values);
             if ($inserts === false) {
-                return;
+                return false;
             }
 
             // Build the query.
@@ -293,7 +321,7 @@ abstract class Entity {
         else {
             // Abort operation if no updates are available.
             if (!isset($this->updates)) {
-                return;
+                return false;
             }
 
             // Process the set of updates and prepared values for the query.
@@ -309,6 +337,7 @@ abstract class Entity {
             $query = "UPDATE $this->table SET $fields WHERE $keyCondition LIMIT 1";
         }
 
+        // Perform the query.
         $this->conn->beginTransaction();
         $stmt = $this->conn->query($query,$values);
         if ($stmt->rowCount() < 1) {
@@ -316,9 +345,9 @@ abstract class Entity {
             if (!$this->create) {
                 // Attempt to create the entity.
                 $this->create = true;
-                $this->commit();
+                $status = $this->commit();
                 $this->conn->endTransaction();
-                return;
+                return $status;
             }
 
             throw new Exception(__METHOD__.': failed to commit entity');
@@ -335,6 +364,7 @@ abstract class Entity {
 
         $this->conn->endTransaction();
         unset($this->updates);
+        return true;
     }
 
     /**
