@@ -145,7 +145,9 @@ class EntityInsertSet implements ArrayAccess, Iterator {
      * Implements Iterator::rewind().
      */
     public function rewind() {
-        reset($this->ents);
+        if (isset($this->ents)) {
+            reset($this->ents);
+        }
     }
 
     /**
