@@ -366,6 +366,14 @@ abstract class Entity {
     }
 
     /**
+     * Invalidates the Entity object to where all fields will be re-fetched at
+     * next access.
+     */
+    public function invalidate() {
+        $this->fetchState = false;
+    }
+
+    /**
      * Creates a new Entity instance. This must be called by derive classes in
      * order for the object to function properly.
      *
