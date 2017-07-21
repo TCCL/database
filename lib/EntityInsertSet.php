@@ -12,13 +12,14 @@ use PDO;
 use Exception;
 use ArrayAccess;
 use Iterator;
+use Countable;
 
 /**
  * EntityInsertSet
  *
  * Provides a library for performing bulk INSERTs on Entity objects.
  */
-class EntityInsertSet implements ArrayAccess, Iterator {
+class EntityInsertSet implements ArrayAccess, Iterator, Countable {
     /**
      * The type name of the Entity subclasses used in the object. This is
      * obtained from the first inserted Entity.
@@ -131,6 +132,9 @@ class EntityInsertSet implements ArrayAccess, Iterator {
      * Implements Iterator::key().
      */
     public function key() {
+        if (!isset($this->ents)) {
+            return;
+        }
         return key($this->ents);
     }
 
@@ -155,6 +159,13 @@ class EntityInsertSet implements ArrayAccess, Iterator {
      */
     public function valid() {
         return $this->offsetExists($this->key());
+    }
+
+    /**
+     * Implements Countable::count().
+     */
+    public function count() {
+        return count($this->ents);
     }
 
     /**
