@@ -213,7 +213,8 @@ abstract class Entity {
      *
      * @param array $fields
      *  The associative array of fields for the entity. This is cross-referenced
-     *  for keys.
+     *  for keys meaning any keys that exist in $fields but weren't registered
+     *  are ignored.
      */
     final public function setFields(array $fields) {
         // If the fields are set, we assume the entity exists and has been
@@ -256,7 +257,7 @@ abstract class Entity {
      *  Returns the list of insert fields as an associative array whose keys
      *  represent the fields to insert.
      */
-    public function getInserts(array &$values) {
+    final public function getInserts(array &$values) {
         if (!$this->create) {
             return false;
         }
@@ -312,9 +313,10 @@ abstract class Entity {
             if ($inserts === false) {
                 return false;
             }
+            $fieldNames = array_keys($inserts);
 
             // Build the query.
-            $fields = implode(',',array_keys($inserts));
+            $fields = implode(',',$fieldNames);
             $prep = '?' . str_repeat(',?',count($inserts)-1);
             $query = "INSERT INTO $this->table ($fields) VALUES ($prep)";
         }
@@ -325,17 +327,25 @@ abstract class Entity {
             }
 
             // Process the set of updates and prepared values for the query.
-            foreach ($this->updates as $key => $_) {
-                $values[] = $this->fields[$key];
+            $fieldNames = array_keys($this->updates);
+            foreach ($fieldNames as $name) {
+                $values[] = $this->fields[$name];
             }
             $keyCondition = $this->getKeyString($keyvals);
             $values = array_merge($values,$keyvals);
 
             // Build the query.
             $fields = implode(',',array_map(function($x){ return "$x = ?"; },
-                                            array_keys($this->updates)));
+                                            $fieldNames));
             $query = "UPDATE $this->table SET $fields WHERE $keyCondition LIMIT 1";
         }
+
+        // Allow derived classes to modify field values before commit through
+        // Entity::processCommitFields().
+        for ($i = 0;$i < count($fieldNames);++$i) {
+            $processing[$fieldNames[$i]] =& $values[$i];
+        }
+        $this->processCommitFields($processing);
 
         // Perform the query.
         $stmt = $this->conn->query($query,$values);
@@ -360,6 +370,9 @@ abstract class Entity {
                 $this->id = $this->keys['id'];
             }
         }
+
+        // Invoke post commit method.
+        $this->postCommit(isset($inserts));
 
         unset($this->updates);
         return true;
@@ -485,6 +498,31 @@ abstract class Entity {
      *  The array of fetch results from the fetch query.
      */
     protected function processFetchResults(array &$fetches) {
+
+    }
+
+    /**
+     * Allows derived classes to process the field data before it is
+     * committed. The default implementation does nothing.
+     *
+     * @param array $fields
+     *  The associative array of field names to field values. The function
+     *  should modify the field value variables to process a field (these
+     *  variables are references).
+     */
+    protected function processCommitFields(array $fields) {
+
+    }
+
+    /**
+     * Invoked when the entity has been committed. This method is to be
+     * overridden by a derived class. The default implementation does nothing.
+     *
+     * @param bool $insert
+     *  If true, the commit performed an INSERT query. Otherwise an UPDATE query
+     *  will be performed.
+     */
+    protected function postCommit($insert) {
 
     }
 
