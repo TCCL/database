@@ -302,7 +302,9 @@ abstract class Entity {
      */
     public function commit() {
         if ($this->create) {
-            // If we can only update this entity then we fail.
+            // If we can only update this entity then we cannot insert into it
+            // and must bail out. The postCommit() hook is not called because a
+            // commit is semantically incorrect.
             if ($this->updateOnly) {
                 return false;
             }
@@ -321,8 +323,11 @@ abstract class Entity {
             $query = "INSERT INTO $this->table ($fields) VALUES ($prep)";
         }
         else {
-            // Abort operation if no updates are available.
+            // Abort operation if no updates are available. We still invoke the
+            // postCommit() hook since the commit is semantically correct but
+            // just empty.
             if (!isset($this->updates)) {
+                $this->postCommit(false);
                 return false;
             }
 
@@ -348,6 +353,7 @@ abstract class Entity {
         $this->processCommitFields($processing);
 
         // Perform the query.
+        $this->conn->beginTransaction();
         $stmt = $this->conn->query($query,$values);
         if ($stmt->rowCount() < 1) {
             // Attempt to create the entity if we weren't already.
@@ -355,10 +361,12 @@ abstract class Entity {
                 // Attempt to create the entity.
                 $this->create = true;
                 $status = $this->commit();
+                $this->conn->endTransaction();
                 return $status;
             }
 
             // Assume the entity was updated but had no changes.
+            $this->conn->endTransaction();
             return true;
         }
 
@@ -373,6 +381,7 @@ abstract class Entity {
 
         // Invoke post commit method.
         $this->postCommit(isset($inserts));
+        $this->conn->endTransaction();
 
         unset($this->updates);
         return true;
