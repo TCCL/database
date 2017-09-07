@@ -301,11 +301,17 @@ abstract class Entity {
      *  insert/update.
      */
     public function commit() {
+        // Begin a transaction for the commit process and perform any precommit
+        // operation.
+        $this->conn->beginTransaction();
+        $this->preCommit(isset($inserts));
+
         if ($this->create) {
             // If we can only update this entity then we cannot insert into it
             // and must bail out. The postCommit() hook is not called because a
             // commit is semantically incorrect.
             if ($this->updateOnly) {
+                $this->conn->endTransaction();
                 return false;
             }
 
@@ -313,6 +319,7 @@ abstract class Entity {
             $values = [];
             $inserts = $this->getInserts($values);
             if ($inserts === false) {
+                $this->conn->endTransaction();
                 return false;
             }
             $fieldNames = array_keys($inserts);
@@ -328,6 +335,7 @@ abstract class Entity {
             // just empty.
             if (!isset($this->updates)) {
                 $this->postCommit(false);
+                $this->conn->endTransaction();
                 return false;
             }
 
@@ -353,7 +361,6 @@ abstract class Entity {
         $this->processCommitFields($processing);
 
         // Perform the query.
-        $this->conn->beginTransaction();
         $stmt = $this->conn->query($query,$values);
         if ($stmt->rowCount() < 1) {
             // Attempt to create the entity if we weren't already.
@@ -524,12 +531,31 @@ abstract class Entity {
     }
 
     /**
-     * Invoked when the entity has been committed. This method is to be
-     * overridden by a derived class. The default implementation does nothing.
+     * Invoked immediately before the entity has been committed. This method is
+     * to be overridden by a derived class. The default implementation does
+     * nothing.
+     *
+     * The operation is included in the commit transaction. Note that pre commit
+     * may actually be called more than once so a derived class should track
+     * this.
      *
      * @param bool $insert
      *  If true, the commit performed an INSERT query. Otherwise an UPDATE query
      *  will be performed.
+     */
+    protected function preCommit($insert) {
+
+    }
+
+    /**
+     * Invoked when the entity has been committed. This method is to be
+     * overridden by a derived class. The default implementation does nothing.
+     *
+     * The operation is included in the commit transaction.
+     *
+     * @param bool $insert
+     *  If true, the commit performed an INSERT query. Otherwise an UPDATE query
+     *  was performed.
      */
     protected function postCommit($insert) {
 
