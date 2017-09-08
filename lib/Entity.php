@@ -236,8 +236,9 @@ abstract class Entity {
 
             // Set field value if found.
             if (array_key_exists($key,$this->fields)) {
-                // See if we can first filter the value.
-                if (isset($this->filters[$key])) {
+                // See if we can first filter the value. Only filter non-null
+                // values.
+                if (isset($this->filters[$key],$value)) {
                     $value = $this->filters[$key]($value);
                 }
 
