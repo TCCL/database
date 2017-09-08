@@ -305,7 +305,10 @@ abstract class Entity {
         // Begin a transaction for the commit process and perform any precommit
         // operation.
         $this->conn->beginTransaction();
-        $this->preCommit(isset($inserts));
+        if ($this->preCommit(isset($inserts)) === false) {
+            $this->conn->rollback();
+            return false;
+        }
 
         if ($this->create) {
             // If we can only update this entity then we cannot insert into it
@@ -335,9 +338,14 @@ abstract class Entity {
             // postCommit() hook since the commit is semantically correct but
             // just empty.
             if (!isset($this->updates)) {
-                $this->postCommit(false);
+                if ($this->postCommit(false) === false) {
+                    $this->conn->rollback();
+                    return false;
+                }
+
+                // Succeed with no changes.
                 $this->conn->endTransaction();
-                return false;
+                return true;
             }
 
             // Process the set of updates and prepared values for the query.
@@ -388,7 +396,10 @@ abstract class Entity {
         }
 
         // Invoke post commit method.
-        $this->postCommit(isset($inserts));
+        if ($this->postCommit(isset($inserts)) === false) {
+            $this->conn->rollback();
+            return false;
+        }
         $this->conn->endTransaction();
 
         unset($this->updates);
@@ -543,6 +554,10 @@ abstract class Entity {
      * @param bool $insert
      *  If true, the commit performed an INSERT query. Otherwise an UPDATE query
      *  will be performed.
+     *
+     * @return mixed
+     *  If the function returns False, then the commit is aborted. Any other
+     *  value is ignored and the commit proceeds.
      */
     protected function preCommit($insert) {
 
@@ -557,6 +572,10 @@ abstract class Entity {
      * @param bool $insert
      *  If true, the commit performed an INSERT query. Otherwise an UPDATE query
      *  was performed.
+     *
+     * @return mixed
+     *  If the function returns False, then the commit is aborted. Any other
+     *  value is ignored and the commit proceeds.
      */
     protected function postCommit($insert) {
 
