@@ -54,7 +54,7 @@ class EntityInsertSet implements ArrayAccess, Iterator, Countable {
         if (isset($ents,$ents[0])) {
             // Make sure they all have the same type name.
             $this->type = get_class($ents[0]);
-            for ($i = 1;$i < count($ents);++$ents) {
+            for ($i = 1;$i < count($ents);++$i) {
                 if (get_class($ents[$i]) != $this->type) {
                     throw new Exception('EntityInsertSet::__construct(): all Entity elements must be of the same type');
                 }
@@ -204,11 +204,46 @@ class EntityInsertSet implements ArrayAccess, Iterator, Countable {
         $prepInner = '?' . str_repeat(',?',count($inserts)-1);
         $prepOuter = "($prepInner)" . str_repeat(",($prepInner)",count($this->ents)-1);
 
-        // Perform the query.
+        $invoker = new EntityInvoke;
+        $this->conn->beginTransaction();
+
+        // Do any precommit actions.
+        foreach ($this->ents as $entity) {
+            if (!$invoker->invokePreCommit($entity)) {
+                $this->conn->rollback();
+                return false;
+            }
+        }
+
+        // Perform the commit query.
         $table = $this->ents[0]->getTable();
         $fields = implode(',',array_keys($inserts));
         $this->conn->query("INSERT INTO $table ($fields) VALUES $prepOuter",$values);
 
+        // Do any postcommit actions.
+        foreach ($this->ents as $entity) {
+            if (!$invoker->invokePostCommit($entity)) {
+                $this->conn->rollback();
+                return false;
+            }
+        }
+
+        $this->conn->endTransaction();
+
         return true;
+    }
+}
+
+class EntityInvoke extends Entity {
+    public function __construct() {
+
+    }
+
+    public function invokePreCommit(Entity $entity) {
+        return ( $entity->preCommit(true) !== false );
+    }
+
+    public function invokePostCommit(Entity $entity) {
+        return ( $entity->postCommit(true) !== false );
     }
 }
