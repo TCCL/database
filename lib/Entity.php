@@ -208,19 +208,26 @@ abstract class Entity {
     }
 
     /**
-     * Sets the fields for the Entity. The Entity assumes the fields represent
-     * an existing entity.
+     * Sets the fields for the Entity.
      *
      * @param array $fields
      *  The associative array of fields for the entity. This is cross-referenced
      *  for keys meaning any keys that exist in $fields but weren't registered
-     *  are ignored.
+     *  are ignored. Both table field names and aliases are allowed.
+     * @param bool $synchronized
+     *  If true, then the field values are assumed to already be synchronized
+     *  with the database backend. Otherwise updates are queued for a later
+     *  commit.
      */
-    final public function setFields(array $fields) {
-        // If the fields are set, we assume the entity exists and has been
-        // fetched.
+    final public function setFields(array $fields,$synchronized = true) {
+        // Always set the fetchState to true to avoid overwriting the fields.
         $this->fetchState = true;
-        $this->create = false;
+
+        // If the caller indicated the entity is synchronized, change the create
+        // flag to reflect this.
+        if ($synchronized) {
+            $this->create = false;
+        }
 
         foreach ($fields as $key => $value) {
             // Set key value if found.
@@ -243,6 +250,9 @@ abstract class Entity {
                 }
 
                 $this->fields[$key] = $value;
+                if (!$synchronized) {
+                    $this->updates[$key] = true;
+                }
             }
         }
     }
@@ -372,7 +382,8 @@ abstract class Entity {
         // Perform the query.
         $stmt = $this->conn->query($query,$values);
         if ($stmt->rowCount() < 1) {
-            // Attempt to create the entity if we weren't already.
+            // Attempt to create the entity if we hadn't already tried and the
+            // update only flag is not active.
             if (!$this->create && !$this->updateOnly) {
                 // Attempt to create the entity.
                 $this->create = true;
@@ -391,7 +402,8 @@ abstract class Entity {
         if (array_key_exists('id',$this->keys) && is_null($this->keys['id'])) {
             $this->keys['id'] = $this->conn->lastInsertId();
             if (array_key_exists('id',$this->fields)) {
-                $this->id = $this->keys['id'];
+                $this->fields['id'] = $this->keys['id'];
+                // No need to set update flag.
             }
         }
 
