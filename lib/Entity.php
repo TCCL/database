@@ -427,7 +427,7 @@ abstract class Entity {
     }
 
     /**
-     * Creates a new Entity instance. This must be called by derive classes in
+     * Creates a new Entity instance. This must be called by derived classes in
      * order for the object to function properly.
      *
      * @param DatabaseConnection $conn
@@ -452,6 +452,7 @@ abstract class Entity {
         // values.
         if (in_array(null,array_values($keys))) {
             $this->create = true;
+            $this->fetchState = true;
         }
         else {
             $this->create = $create;
