@@ -1,14 +1,284 @@
-database - v1.2.0
+database - v1.3.0
 --------------------------------------------------------------------------------
-This library provides a really simple wrapper above PDO. It also eliminates
-boilerplate associated with connecting to the database. It expects database
-credentials to be managed in $GLOBALS.
+This library provides a really simple PDO database connection wrapper in
+addition to providing several database abstraction mechanisms for representing
+database entities. This package is designed to eliminate boilerplate associated
+with connecting to the database/managing credentials and provide abstractions,
+but does not provide fine-tuned query abstractions.
 
-The library also provides a simple Entity abstract class for wrapping UPDATE and
-INSERT operations for single entities.
+While targeting PDO lets the library use any database engine, the abstractions
+code has been tested and developed for use with MySQL. That isn't to say it
+won't necessarily work with another database engine though.
 
 Primary authors:
 
     Roger Gee <roger.gee@tulsalibrary.org>
 
 --------------------------------------------------------------------------------
+Installing
+
+This library is available as a composer package. Require 'tccl/database' in your
+composer.json file and then install.
+
+--------------------------------------------------------------------------------
+Classes
+
+    TCCL\Database\DatabaseConnection
+        Wraps PDO to represent a database connection
+
+    TCCL\Database\Entity
+        Provides an abstraction for managing a single entity
+
+    TCCL\Database\EntityInsertSet
+        Provides an abstraction for inserting multiple Entity objects
+
+--------------------------------------------------------------------------------
+Usage
+
+[DatabaseConnection]
+
+Use a DatabaseConnection instance to manage a database connection. The
+connection parameters are to be stored in the $GLOBALS superglobal. The bucket
+under this array is arbitrary and may be arbitrarily nested. The structure of
+the bucket is an indexed array with three parts like:
+
+    <?php
+
+    $dbconfig = array(
+        'mysql:host=localhost;dbname=db', // connection string
+        'user', // database user
+        'password', // database user password
+    );
+
+When initializing a database connection, pass in the keys that index $GLOBALS to
+get to the database array bucket. For example, to load the database info from
+the global variable from the last example (i.e. $dbconfig):
+
+    <?php
+
+    $conn = new \TCCL\Database\DatabaseConnection('dbconfig');
+
+If you've nested the array down, specify a parameter list to the constructor:
+
+    <?php
+
+    define('CONFIG','my-app');
+    $GLOBALS['a']['b'][CONFIG]['dbinfo'] = array( /* ... */ );
+    $conn = new \TCCL\Database\DatabaseConnection('a','b',CONFIG,'dbinfo');
+
+It may be useful to extend DatabaseConnection and implement a singleton
+pattern. The constructor of your subclass should take care of passing in the
+correct keys to its parent constructor. Note that a singleton pattern is not
+entirely necessary since the DatabaseConnection caches PDO instances in a static
+class property.
+
+Provided methods:
+
+    function query($query,$args = null /* ... */)
+
+        Runs a query as a prepared statement. Args may be a single array
+        specifying all the query parameters or the first argument in a parameter
+        list. Alternatively no $args can be specified if the parameter is
+        omitted, though you might just use rawQuery() for performance.
+
+        Example:
+
+            $conn->query('SELECT * FROM table WHERE a = ? and b = ?',$a,$b);
+                OR
+            $conn->query('SELECT * FROM table WHERE a = ? and b = ?',[$a,$b]);
+
+    function rawQuery($query)
+
+        Runs a query directly (no filtering). Depending on the underlying
+        driver, you may be able to run more than one statement in a single
+        query string.
+
+    function prepare($query)
+
+        Wraps PDO::prepare().
+
+    function getPDO()
+
+        Gets the underlying PDO connection instance.
+
+    function beginTransaction()
+
+        Wraps PDO::beginTransaction(); however the transaction is reference
+        counted so multiple contexts can pretend to have a transaction (they
+        really just share the same transaction).
+
+    function endTransaction()
+
+        Wraps PDO::endTransaction(); reference counting is employed in tandem
+        with DatabaseConnection::beginTransaction().
+
+    function rollback()
+
+        Wraps PDO::rollback(); this resets the reference counter. Therefore it's
+        the responsiblity of the caller to properly unwind each context (hint:
+        throwing an Exception is typically a good way to implement this).
+
+    function lastInsertId()
+
+        Wraps PDO::lastInsertId().
+
+[Entity]
+
+Use the Entity class to define a data model in an application with an
+object-oriented interface. This model should map to a single core entity in the
+database schema, though you can write hooks to handle other entities as
+well. The Entity class is abstract: to use the class, you simply have to define
+a constructor that calls the parent, Entity constructor. Then you register
+fields on the Entity. The fields you register become dynamic properties on the
+object, and you can define filters and aliases for fields as well. The Entity
+class can write queries for you to fetch (i.e. SELECT), INSERT and UPDATE an
+entity. However you can override queries to provide you own implementations for
+more advanced scenarios. This is useful for providing virtual fields which may
+be the result of JOINing on other tables.
+
+For example, consider the following schema:
+
+    CREATE TABLE person (
+        id INT NOT NULL AUTO_INCREMENT,
+        name VARCHAR(128),
+        nationality VARCHAR(128),
+        dob DATETIME,
+        favorite_integer INT,
+
+        PRIMARY KEY (id)
+    );
+
+An Entity that models this might look like:
+
+    <?php
+
+    class Person extends Entity {
+        public function __construct($id = null) {
+            $keys = ['id' => $id];
+            parent::__construct(get_db_conn(),'person',$keys);
+            $this->registerField('id','personId',null,'intval');
+            $this->registerField('name');
+            $this->registerField('nationality',null,'American');
+            $this->registerField('dob','dateOfBirth',null,'date_create');
+            $this->registerField('favorite_integer','favInt',null,'intval');
+        }
+
+        /**
+         * Overrides Entity::processCommitFields().
+         */
+        protected function processCommitFields(array $fields) {
+            if (isset($fields['dob'])) {
+                $fields['dob'] = $fields['dob']->format('Y-m-d H:i:s');
+            }
+        }
+    }
+
+Every entity constructor receives a DatabaseConnection object, a table name and
+a list of keys. Optionally you can specify a fourth parameter that indicates the
+create state of an Entity. The $keys array specifies which fields act as keys
+when fetching an entity or creating a new entity. It's worth noting that a key
+name of 'id' has a special meaning for when a new entity is INSERTed into the
+database and should typically be used. The key value can be null, which
+indicates the new Entity is a candidate for creation. Otherwise the object will
+attempt a lookup on an existing entity.
+
+The registerField() method defines the result fields from the fetch query. By
+default you can define this or some subset of the table fields. However if you
+override the query by overriding getFetchQuery(), you can define a field for a
+subset of that query's result set. This method also allows you to define
+aliases; note that these aliases are only used in the object and not in any
+queries. If you use aliases in a custom query, they will be used for the field
+name just like with any PDO result set. Optionally you can define a default
+value for a field (useful for new entities) and a filter callback for
+transforming the string database result into some other PHP type. The filter
+callback is only used when fetching an existing entity.
+
+In the example, the 'dateOfBirth' field is an alias for the table field
+'dob'. The actual field on the Entity object will be a DateTime instance,
+created by filtering the date string through the date extension's date_create()
+function.
+
+Fields are accessed like public properties on Entity objects. If you specified
+an alias, you must use the alias name. Otherwise, the table field name is
+valid. Here's an example:
+
+    <?php
+
+    $id = 5; // assume there is person with id=5
+
+    $person = new Person($id);
+    var_dump($person->name);
+
+This example looks up the name of the person entity with id=5. An Entity
+lazy-loads its fields, so the actual query doesn't happen until first access.
+
+When writing a field, the Entity marks that field as dirty. Then when you commit
+the entity, only the dirty fields are used to INSERT/UPDATE the entity. The
+Entity keeps track of whether it exists or not, deduced from the $keys parameter
+to the Entity constructor. You can query whether an Entity exists via the
+exists() method.
+
+The following example creates a new Entity:
+
+    <?php
+
+    $bob = new Person;
+    $bob->name = 'Bob';
+    $bob->favInt = 56;
+    $bob->dateOfBirth = new DateTime('1993-09-14 00:00:00');
+    $bob->commit();
+
+    var_dump($bob->id);
+
+Since the 'id' field is handled specially by the functionality, it gets the
+insert ID from the underlying query result. The commit() method returns true if
+the Entity was created or updated. Be careful with this, since it may return
+false if an update/insert was empty.
+
+Special features:
+
+    - Call $entity->setUpdateOnly(true) to prevent accidental creation of an
+      entity having keys that do not map to an existing entity. This can also be
+      prevented by calling exists() to make sure the entity exists.
+
+    - An associative array of the fields can be retrieved via
+      $entity->getFields(). A flag to this method controls whether the keys are
+      the property names (i.e. includes aliases) or the table field names.
+
+    - Call $entity->invalidate() to forget about fetched field values. This
+      means the next access will perform a query and overwrite all fields.
+
+    - Class override API:
+
+        - function getFetchQuery(array &$values)
+            Overrides the fetch query; you return the query and write query
+            parameters to $values. Use getKeys() to get the key bucket instead
+            of accessing object properties. Also, getKeyString() can be used to
+            get an SQL snippet suitable for injecting into a WHERE clause.
+
+        - function processFetchResults(array &$fetches)
+            Process the results of a fetch before they are applied to the
+            object. Values are read from $fetches and written back to $fetches
+            as well. Note: the keys in $fetches are the table field names, not
+            the aliases.
+
+        - function processCommitFields(array $fields)
+            Like processFetchResults() but for values used to commit an
+            Entity. Due to the implementation, each bucket in $fields is a
+            reference variable, so you can treat $fields as if it was passed by
+            reference (when writing array fields). Note: the keys in $fetches
+            are the table field names, not the aliases.
+
+        - function preCommit($insert)
+            Used to perform a custom hook before a commit has been
+            processed. The $insert flag determines if the query mode is INSERT
+            or UPDATE. Note: this method is called in a database transaction
+            context.
+
+        - function postCommit($insert)
+            Like preCommit() but executed after the entity was committed. If an
+            'id' was set due to an INSERT, it is guarenteed to be ready for
+            consumption by this method.
+
+        NOTE: preCommit() and postCommit() are executed for empty updates but
+        not for empty inserts or inserts blocked by setUpdateOnly().

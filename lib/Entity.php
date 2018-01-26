@@ -536,7 +536,8 @@ abstract class Entity {
      * implementation does nothing.
      *
      * @param array &$fetches
-     *  The array of fetch results from the fetch query.
+     *  The array of fetch results from the fetch query. The keys correspond to
+     *  the database table field names, not the aliases.
      */
     protected function processFetchResults(array &$fetches) {
 
@@ -547,9 +548,10 @@ abstract class Entity {
      * committed. The default implementation does nothing.
      *
      * @param array $fields
-     *  The associative array of field names to field values. The function
-     *  should modify the field value variables to process a field (these
-     *  variables are references).
+     *  The associative array of field names to field values. The field names
+     *  are the database table field names, not the aliases. The function should
+     *  modify the field value variables to process a field (these variables are
+     *  references).
      */
     protected function processCommitFields(array $fields) {
 
