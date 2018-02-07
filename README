@@ -1,4 +1,4 @@
-database - v1.3.0
+database - v1.3.1
 --------------------------------------------------------------------------------
 This library provides a really simple PDO database connection wrapper in
 addition to providing several database abstraction mechanisms for representing
@@ -282,3 +282,8 @@ Special features:
 
         NOTE: preCommit() and postCommit() are executed for empty updates but
         not for empty inserts or inserts blocked by setUpdateOnly().
+
+[EntityInsertSet]
+
+This class provides a convenience abstraction to insert multiple entities at
+once. However it is not possible to reliably determine the insert IDs this way.
