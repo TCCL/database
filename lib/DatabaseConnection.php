@@ -128,7 +128,7 @@ class DatabaseConnection {
 
         if (isset($error)) {
             $message = is_null($error[2]) ? '' : ": {$error[2]}";
-            throw new Exception(__METHOD__.": failed database query$message");
+            throw new Exception(__METHOD__.": failed database query$message",$error[1]);
         }
 
         return $result;
@@ -147,7 +147,7 @@ class DatabaseConnection {
         if ($stmt === false) {
             $error = $this->pdo()->errorInfo();
             $message = is_null($error[2]) ? '' : ": {$error[2]}";
-            throw new Exception(__METHOD__.": failed database query$message");            
+            throw new Exception(__METHOD__.": failed database query$message",$error[1]);            
         }
 
         return $stmt;
