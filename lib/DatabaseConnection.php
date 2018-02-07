@@ -188,7 +188,7 @@ class DatabaseConnection {
      * Wraps PDO::rollback(). This will pop out of all transaction frames.
      */
     public function rollback() {
-        if (self::$transactionCounters[$this->key] > 1) {
+        if (self::$transactionCounters[$this->key] >= 1) {
             $this->pdo()->rollback();
             self::$transactionCounters[$this->key] = 0;
         }
