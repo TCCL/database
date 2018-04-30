@@ -1,4 +1,4 @@
-database - v1.3.1
+database - v1.4.0
 --------------------------------------------------------------------------------
 This library provides a really simple PDO database connection wrapper in
 addition to providing several database abstraction mechanisms for representing
@@ -31,6 +31,9 @@ Classes
 
     TCCL\Database\EntityInsertSet
         Provides an abstraction for inserting multiple Entity objects
+
+    TCCL\Database\Schema
+        Provides abstraction for defining and installing schemas
 
 --------------------------------------------------------------------------------
 Usage
@@ -287,3 +290,104 @@ Special features:
 
 This class provides a convenience abstraction to insert multiple entities at
 once. However it is not possible to reliably determine the insert IDs this way.
+
+[Schema]
+
+This class provides a way to manage schemas programmatically. Currently, the
+functionality only supports creating initial schema, not applying database
+updates.
+
+A "Schema" object implements an array interface, so you can denote the schema
+using a PHP array. Since the order of table definitions is important, you must
+define the tables in the array in the correct order. Table field metadata
+(i.e. types, constraints, ETC.) are specified in this array. You should use the
+constants defined in class Schema for field sizes and types. Here is an example
+that demonstrates all of the capabilities:
+
+    $schema = new Schema;
+    $schema['table'] = [
+        // Specify primary keys like this. You may specify more than one to get
+        // a compound primary key
+        'primary keys' => [
+            // Field definitions...
+
+            // A SERIAL_TYPE gets AUTO_INCREMENT. You may optionally specify a
+            // "size" and "not null" properties.
+            'id' => [
+                'type' => Schema::SERIAL_TYPE,
+                'not null' => true,
+            ],
+        ],
+
+        // Non-constrained fields are specified here.
+        'fields' => [
+            // Field definitions...
+
+            // Integer types can have a "size".
+            'thing1' => [
+                'type' => Schema::INTEGER_TYPE,
+                'size' => Schema::SIZE_TINY,
+            ],
+            'thing2' => [
+                'type' => Schema::INTEGER_TYPE,
+                'not null' => true,
+                'default' => 345,
+            ],
+
+            // String types may have a "length".
+            'string1' => [
+                'type' => Schema::VARCHAR_TYPE,
+                'not null' => false,
+                'length' => 1024,
+            ],
+
+            // NUMERIC types *MUST* specify "precision" and "scale".
+            'net_worth' => [
+                'type' => Schema::NUMERIC_TYPE,
+                'precision' => 9,
+                'scale' => 2,
+            ],
+
+            'batting_average' => [
+                'type' => Schema::FLOAT_TYPE,
+            ],
+            'memoir' => [
+                'type' => Schema::BLOB_TYPE,
+                'size' => Schema::SIZE_BIG,
+            ],
+        ],
+
+        // Foreign keys are specified like this. Do not specify the foreign
+        // key field in the "fields" or any other section.
+        'foreign keys' => [
+            'other_table_id' => [
+                // "key" is a single field definition
+                'key' => [
+                    'type' => DatabaseSchema::INTEGER_TYPE,
+                ],
+
+                'table' => 'other_table',
+                'field' => 'id',
+            ],
+        ],
+
+        // Unique keys are specified like this. These reference existing fields.
+        'unique keys' => [
+            // UNIQUE keys may be compound.
+            'unique_thing1' => ['thing1'],
+        ],
+
+        // Indexes are specified like this. These reference existing fields.
+        'indexes' => [
+            'index_thing2' => ['thing2'],
+        ],
+    ];
+
+To commit the schema, call the "execute" method:
+
+    // $conn = ...
+    $schema->execute($conn);
+
+To test your schema generation, just use the object like a string:
+
+    echo "MY SCHEMA: $schema";

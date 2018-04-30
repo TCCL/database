@@ -284,7 +284,8 @@ class Schema implements ArrayAccess, Iterator, Countable {
             }
         }
         else {
-            $mysqlType = false;
+            // Assume type is native mysql type name.
+            $mysqlType = $type;
         }
 
         if ($mysqlType === false) {
