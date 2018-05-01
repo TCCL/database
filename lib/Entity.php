@@ -367,7 +367,7 @@ abstract class Entity {
             $values = array_merge($values,$keyvals);
 
             // Build the query.
-            $fields = implode(',',array_map(function($x){ return "$x = ?"; },
+            $fields = implode(',',array_map(function($x){ return "{$this->table}.$x = ?"; },
                                             $fieldNames));
             $query = "UPDATE $this->table SET $fields WHERE $keyCondition LIMIT 1";
         }
@@ -508,7 +508,7 @@ abstract class Entity {
      */
     final protected function getKeyString(&$values) {
         $keys = array_keys($this->keys);
-        $query = implode(' AND ',array_map(function($x){ return "$x = ?"; },$keys));
+        $query = implode(' AND ',array_map(function($x){ return "{$this->table}.$x = ?"; },$keys));
         $values = array_values($this->keys);
         return $query;
     }
