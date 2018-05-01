@@ -339,9 +339,9 @@ abstract class Entity {
             $fieldNames = array_keys($inserts);
 
             // Build the query.
-            $fields = implode(',',$fieldNames);
+            $fields = implode(',',array_map(function($x){ return "`$x`"; },$fieldNames));
             $prep = '?' . str_repeat(',?',count($inserts)-1);
-            $query = "INSERT INTO $this->table ($fields) VALUES ($prep)";
+            $query = "INSERT INTO `{$this->table}` ($fields) VALUES ($prep)";
         }
         else {
             // Abort operation if no updates are available. We still invoke the
@@ -367,9 +367,9 @@ abstract class Entity {
             $values = array_merge($values,$keyvals);
 
             // Build the query.
-            $fields = implode(',',array_map(function($x){ return "{$this->table}.$x = ?"; },
+            $fields = implode(',',array_map(function($x){ return "`$x` = ?"; },
                                             $fieldNames));
-            $query = "UPDATE $this->table SET $fields WHERE $keyCondition LIMIT 1";
+            $query = "UPDATE `{$this->table}` SET $fields WHERE $keyCondition LIMIT 1";
         }
 
         // Allow derived classes to modify field values before commit through
@@ -508,7 +508,7 @@ abstract class Entity {
      */
     final protected function getKeyString(&$values) {
         $keys = array_keys($this->keys);
-        $query = implode(' AND ',array_map(function($x){ return "{$this->table}.$x = ?"; },$keys));
+        $query = implode(' AND ',array_map(function($x){ return "`{$this->table}`.`$x` = ?"; },$keys));
         $values = array_values($this->keys);
         return $query;
     }
@@ -525,9 +525,11 @@ abstract class Entity {
      */
     protected function getFetchQuery(array &$values) {
         $keyCondition = $this->getKeyString($values);
-        $fields = implode(',',array_keys($this->fields));
+        $fields = array_keys($this->fields);
+        $fields = array_map(function($x){ return "`{$this->table}`.`$x`"; },$fields);
+        $fields = implode(',',$fields);
 
-        $query = "SELECT $fields FROM $this->table WHERE $keyCondition LIMIT 1";
+        $query = "SELECT $fields FROM `{$this->table}` WHERE $keyCondition LIMIT 1";
         return $query;
     }
 
