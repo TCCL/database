@@ -315,7 +315,7 @@ abstract class Entity {
         // Begin a transaction for the commit process and perform any precommit
         // operation.
         $this->conn->beginTransaction();
-        if ($this->preCommit(isset($inserts)) === false) {
+        if ($this->preCommit($this->create) === false) {
             $this->conn->rollback();
             return false;
         }
@@ -408,7 +408,7 @@ abstract class Entity {
         }
 
         // Invoke post commit method.
-        if ($this->postCommit(isset($inserts)) === false) {
+        if ($this->postCommit($this->create) === false) {
             $this->conn->rollback();
             return false;
         }
