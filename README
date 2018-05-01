@@ -1,10 +1,10 @@
-database - v1.4.0
+database - v1.4.1
 --------------------------------------------------------------------------------
 This library provides a really simple PDO database connection wrapper in
 addition to providing several database abstraction mechanisms for representing
-database entities. This package is designed to eliminate boilerplate associated
-with connecting to the database/managing credentials and provide abstractions,
-but does not provide fine-tuned query abstractions.
+database entities and schemas. This package is designed to eliminate boilerplate
+associated with connecting to the database and managing credentials. Note that
+this library does not provide fine-tuned query abstractions.
 
 While targeting PDO lets the library use any database engine, the abstractions
 code has been tested and developed for use with MySQL. That isn't to say it
