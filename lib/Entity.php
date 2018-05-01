@@ -456,6 +456,7 @@ abstract class Entity {
         }
         else {
             $this->create = $create;
+            $this->fetchState = $create;
         }
     }
 

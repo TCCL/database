@@ -1,4 +1,4 @@
-database - v1.4.1
+database - v1.4.2
 --------------------------------------------------------------------------------
 This library provides a really simple PDO database connection wrapper in
 addition to providing several database abstraction mechanisms for representing
@@ -8,7 +8,8 @@ this library does not provide fine-tuned query abstractions.
 
 While targeting PDO lets the library use any database engine, the abstractions
 code has been tested and developed for use with MySQL. That isn't to say it
-won't necessarily work with another database engine though.
+won't necessarily work with another database engine though. You might have more
+of a problem with compatibility with the Entity framework classes.
 
 Primary authors:
 
