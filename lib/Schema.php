@@ -206,7 +206,7 @@ class Schema implements ArrayAccess, Iterator, Countable {
 
         $fields = [];
         $constraints = [];
-        if (isset($table['primary keys'])) {
+        if (isset($table['primary keys']) && !empty($table['primary keys'])) {
             $keyfields = [];
             foreach ($table['primary keys'] as $field => $fieldInfo) {
                 $fields[] = $this->generateField($field,$fieldInfo);
