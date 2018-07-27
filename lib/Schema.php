@@ -299,7 +299,7 @@ class Schema implements ArrayAccess, Iterator, Countable {
         if (isset($info['default'])) {
             $def = $info['default'];
             if (!is_int($def)) {
-                $def .= "'" . str_replace("'","\\'",$def) . "'";
+                $def = "'" . str_replace("'","\\'",$def) . "'";
             }
             $modifiers[] = "DEFAULT $def";
         }
