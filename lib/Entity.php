@@ -109,7 +109,7 @@ abstract class Entity {
      */
 
     public function __get($propertyName) {
-        $this->doFetch();
+        $this->sync();
         if (isset($this->props[$propertyName])) {
             return $this->fields[$this->props[$propertyName]];
         }
@@ -131,7 +131,7 @@ abstract class Entity {
 
     public function __isset($field) {
         // Make sure the property is registered and it's value is set.
-        $this->doFetch();
+        $this->sync();
         return isset($this->props[$field]) && isset($this->fields[$this->props[$field]]);
     }
 
@@ -143,7 +143,7 @@ abstract class Entity {
     public function exists() {
         // NOTE: The existsState may be independent of the fetchState.
         if (!$this->existsState) {
-            $this->doFetch();
+            $this->sync();
         }
 
         return $this->existsState;
@@ -188,7 +188,7 @@ abstract class Entity {
      *  An associative array mapping field names to field values.
      */
     public function getFields($usePropertyNames = true) {
-        $this->doFetch();
+        $this->sync();
         if ($usePropertyNames) {
             $result = [];
             foreach ($this->props as $propName => $fieldName) {
@@ -283,17 +283,16 @@ abstract class Entity {
             return false;
         }
 
-        // Process any specified updates as field inserts.
-        if (isset($this->updates)) {
-            foreach ($this->updates as $key => &$value) {
-                $value = $this->fields[$key];
-                $values[] = $this->fields[$key];
-            }
-            unset($value);
-        }
-        else {
+        if (!isset($this->updates)) {
             return false;
         }
+
+        // Process any specified updates as field inserts.
+        foreach ($this->updates as $key => &$value) {
+            $value = $this->fields[$key];
+            $values[] = $this->fields[$key];
+        }
+        unset($value);
 
         // Add any non-null keys to the list of inserts. We'll assume null
         // keys are defaulted or auto-incremented in some way by the DB
@@ -303,11 +302,6 @@ abstract class Entity {
                 $this->updates[$key] = true;
                 $values[] = $value;
             }
-        }
-
-        // Abort operation if no inserts are available.
-        if (!isset($this->updates)) {
-            return false;
         }
 
         return $this->updates;
@@ -364,7 +358,7 @@ abstract class Entity {
                     return false;
                 }
 
-                // Succeed with no changes.
+                // Succeed with no direct changes.
                 $this->endTransaction(false);
                 return true;
             }
@@ -461,6 +455,38 @@ abstract class Entity {
         $this->endTransaction();
         unset($this->updates);
         return true;
+    }
+
+    /**
+     * Performs the fetch operation. This overwrites all field values currently
+     * available.
+     */
+    public function sync() {
+        if (!$this->fetchState) {
+            $values = [];
+            $query = $this->getFetchQuery($values);
+            $stmt = $this->conn->query($query,$values);
+
+            $newfields = $stmt->fetch(PDO::FETCH_ASSOC);
+            $this->fetchState = true;
+
+            // If we didn't get any results, we can assume the entity doesn't
+            // exist. In this case we'll want to enter create mode so that any
+            // future commit won't attempt an UPDATE but skip to an INSERT.
+            if (!is_array($newfields)) {
+                $this->create = true;
+                $this->existsState = false;
+            }
+            else {
+                // Allow derived functionality the chance to process the fields.
+                $this->processFetchResults($newfields);
+
+                // Update fields with new fetch results.
+                $this->setFields($newfields);
+
+                $this->existsState = true;
+            }
+        }
     }
 
     /**
@@ -643,38 +669,6 @@ abstract class Entity {
      */
     protected function postCommit($insert) {
 
-    }
-
-    /**
-     * Performs the fetch operation. This overwrites all field values currently
-     * available.
-     */
-    private function doFetch() {
-        if (!$this->fetchState) {
-            $values = [];
-            $query = $this->getFetchQuery($values);
-            $stmt = $this->conn->query($query,$values);
-
-            $newfields = $stmt->fetch(PDO::FETCH_ASSOC);
-            $this->fetchState = true;
-
-            // If we didn't get any results, we can assume the entity doesn't
-            // exist. In this case we'll want to enter create mode so that any
-            // future commit won't attempt an UPDATE but skip to an INSERT.
-            if (!is_array($newfields)) {
-                $this->create = true;
-                $this->existsState = false;
-            }
-            else {
-                // Allow derived functionality the chance to process the fields.
-                $this->processFetchResults($newfields);
-
-                // Update fields with new fetch results.
-                $this->setFields($newfields);
-
-                $this->existsState = true;
-            }
-        }
     }
 
     /**
