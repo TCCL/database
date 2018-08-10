@@ -392,6 +392,12 @@ abstract class Entity {
                 return $status;
             }
 
+            // Invoke post commit method.
+            if ($this->postCommit($this->create) === false) {
+                $this->conn->rollback();
+                return false;
+            }
+
             // Assume the entity was updated but had no changes.
             $this->conn->endTransaction();
             return true;
