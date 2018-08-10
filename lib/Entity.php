@@ -82,13 +82,19 @@ abstract class Entity {
     private $fetchState = false;
 
     /**
-     * Determines whether the entity is expected to be created or updated. This
-     * effectively stores whether the entity exists or not after doing a
-     * doFetch() operation.
+     * Determines whether the entity is expected to be created or updated.
      *
      * @var bool
      */
     private $create;
+
+    /**
+     * Caches whether the entity exists. This is essentially whether at least
+     * one field is set.
+     *
+     * @var bool
+     */
+    private $existsState = false;
 
     /**
      * Determines whether the entity is expected to already exist. By default we
@@ -135,8 +141,12 @@ abstract class Entity {
      * @return bool
      */
     public function exists() {
-        $this->doFetch();
-        return !$this->create;
+        // NOTE: The existsState may be independent of the fetchState.
+        if (!$this->existsState) {
+            $this->doFetch();
+        }
+
+        return $this->existsState;
     }
 
     /**
@@ -308,24 +318,25 @@ abstract class Entity {
      *
      * @return bool
      *  Returns true if the entity was successfully updated or created, false
-     *  otherwise. False may be returned if the entity had nothing to
-     *  insert/update.
+     *  otherwise. If false is returned, then the transaction was rolled back
+     *  and the Entity may be in an inconsistent state.
      */
     public function commit() {
         // Begin a transaction for the commit process and perform any precommit
         // operation.
         $this->conn->beginTransaction();
         if ($this->preCommit($this->create) === false) {
-            $this->conn->rollback();
+            $this->rollback();
             return false;
         }
 
         if ($this->create) {
-            // If we can only update this entity then we cannot insert into it
-            // and must bail out. The postCommit() hook is not called because a
-            // commit is semantically incorrect.
+            // NOTE: If update-only is flagged or if there are no inserts to
+            // process, postCommit() hook is not called because a commit is
+            // semantically incorrect. In this instance we just do a rollback.
+
             if ($this->updateOnly) {
-                $this->conn->endTransaction();
+                $this->rollback();
                 return false;
             }
 
@@ -333,7 +344,7 @@ abstract class Entity {
             $values = [];
             $inserts = $this->getInserts($values);
             if ($inserts === false) {
-                $this->conn->endTransaction();
+                $this->rollback();
                 return false;
             }
             $fieldNames = array_keys($inserts);
@@ -349,12 +360,12 @@ abstract class Entity {
             // just empty.
             if (!isset($this->updates)) {
                 if ($this->postCommit(false) === false) {
-                    $this->conn->rollback();
+                    $this->rollback();
                     return false;
                 }
 
                 // Succeed with no changes.
-                $this->conn->endTransaction();
+                $this->endTransaction(false);
                 return true;
             }
 
@@ -381,26 +392,52 @@ abstract class Entity {
 
         // Perform the query.
         $stmt = $this->conn->query($query,$values);
+
         if ($stmt->rowCount() < 1) {
-            // Attempt to create the entity if we hadn't already tried and the
-            // update only flag is not active.
-            if (!$this->create && !$this->updateOnly) {
-                // Attempt to create the entity.
-                $this->create = true;
-                $status = $this->commit();
-                $this->conn->endTransaction();
-                return $status;
+            if (!$this->create) {
+                // If the row count is less than one on UPDATE, then several
+                // things may have happened: 1) The entity exists but none of
+                // the fields were actually updated or 2) the entity does not
+                // exist. We must call exists() to resolve the ambiguity.
+
+                if (!$this->existsState) {
+                    // If we do not know if the entity exists, we must ensure we
+                    // can do a fetch to make the determination.
+                    $this->fetchState = false;
+                }
+
+                if (!$this->exists()) {
+                    if ($this->updateOnly) {
+                        // The commit fails if the entity does not exist when in
+                        // update-only mode.
+                        $this->rollback();
+                        return false;
+                    }
+
+                    // Attempt to create the entity recursively. This will
+                    // handle any endTransaction() or rollback() calls.
+                    $this->create = true;
+                    return $this->commit();
+                }
+
+                // Otherwise we must assume the entity exists but the update had
+                // no changes.
+
+                // Invoke post commit method.
+                if ($this->postCommit($this->create) === false) {
+                    $this->rollback();
+                    return false;
+                }
+
+                $this->endTransaction();
+                return true;
             }
 
-            // Invoke post commit method.
-            if ($this->postCommit($this->create) === false) {
-                $this->conn->rollback();
-                return false;
-            }
+            // If the row count is less than one on INSERT, then the commit
+            // fails.
 
-            // Assume the entity was updated but had no changes.
-            $this->conn->endTransaction();
-            return true;
+            $this->rollback();
+            return false;
         }
 
         // Handle insert ID updates. We do this conventionally for keys and
@@ -412,13 +449,16 @@ abstract class Entity {
             $this->fields['id'] = $this->conn->lastInsertId();
         }
 
+        $this->fetchState = false;
+        $this->existsState = true;
+
         // Invoke post commit method.
         if ($this->postCommit($this->create) === false) {
-            $this->conn->rollback();
+            $this->rollback();
             return false;
         }
-        $this->conn->endTransaction();
 
+        $this->endTransaction();
         unset($this->updates);
         return true;
     }
@@ -429,6 +469,7 @@ abstract class Entity {
      */
     public function invalidate() {
         $this->fetchState = false;
+        $this->existsState = false;
     }
 
     /**
@@ -622,6 +663,7 @@ abstract class Entity {
             // future commit won't attempt an UPDATE but skip to an INSERT.
             if (!is_array($newfields)) {
                 $this->create = true;
+                $this->existsState = false;
             }
             else {
                 // Allow derived functionality the chance to process the fields.
@@ -629,7 +671,31 @@ abstract class Entity {
 
                 // Update fields with new fetch results.
                 $this->setFields($newfields);
+
+                $this->existsState = true;
             }
         }
+    }
+
+    /**
+     * Called when a commit() fails.
+     */
+    private function rollback() {
+        $this->invalidate();
+        $this->conn->rollback();
+    }
+
+    /**
+     * Called when a commit() succeeds.
+     *
+     * @param bool $hadChanges
+     *  True if the commit() issued an UPDATE or INSERT.
+     */
+    private function endTransaction($hadChanges = true) {
+        if ($hadChanges) {
+            $this->fetchState = false;
+            $this->existsState = true;
+        }
+        $this->conn->endTransaction();
     }
 }
