@@ -397,14 +397,13 @@ abstract class Entity {
             return true;
         }
 
-        // Handle insert ID updates. We only do this conventionally for keys
-        // with the name 'id'.
+        // Handle insert ID updates. We do this conventionally for keys and
+        // fields with the name 'id'.
         if (array_key_exists('id',$this->keys) && is_null($this->keys['id'])) {
             $this->keys['id'] = $this->conn->lastInsertId();
-            if (array_key_exists('id',$this->fields)) {
-                $this->fields['id'] = $this->keys['id'];
-                // No need to set update flag.
-            }
+        }
+        if (array_key_exists('id',$this->fields)) {
+            $this->fields['id'] = $this->conn->lastInsertId();
         }
 
         // Invoke post commit method.
