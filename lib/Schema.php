@@ -19,6 +19,8 @@ use Exception;
  * Provides an abstraction layer for defining and installing schemas.
  */
 class Schema implements ArrayAccess, Iterator, Countable {
+    const FILTER_FUNC = '\TCCL\Database\Schema::filterName';
+
     /**
      * Generic database type constants
      */
@@ -54,6 +56,19 @@ class Schema implements ArrayAccess, Iterator, Countable {
      */
     private $prefix;
 
+    /**
+     * Filters a name for use in a query.
+     *
+     * @param string $name
+     *  The name to filter.
+     *
+     * @return string
+     *  
+     */
+    public static function filterName($name) {
+        return "`$name`";
+    }
+
     private static function getTypeMap() {
         static $map = [
             'serial:tiny' => 'TINYINT',
@@ -85,7 +100,6 @@ class Schema implements ArrayAccess, Iterator, Countable {
             'text:medium' => 'MEDIUMTEXT',
             'text:normal' => 'TEXT',
             'text:big' => 'LONGTEXT',
-
 
             'blob:normal' => 'BLOB',
             'blob:big' => 'LONGBLOB',
@@ -201,7 +215,7 @@ class Schema implements ArrayAccess, Iterator, Countable {
     }
 
     private function generateTable($name,$table) {
-        $name = "{$this->prefix}$name";
+        $name = self::filterName("{$this->prefix}$name");
         $sql = "CREATE TABLE $name ( ";
 
         $fields = [];
@@ -210,7 +224,7 @@ class Schema implements ArrayAccess, Iterator, Countable {
             $keyfields = [];
             foreach ($table['primary keys'] as $field => $fieldInfo) {
                 $fields[] = $this->generateField($field,$fieldInfo);
-                $keyfields[] = $field;
+                $keyfields[] = self::filterName($field);
             }
             $keyfields = implode(',',$keyfields);
             $constraints[] = "PRIMARY KEY ($keyfields)";
@@ -222,7 +236,8 @@ class Schema implements ArrayAccess, Iterator, Countable {
         }
         if (isset($table['unique keys'])) {
             foreach ($table['unique keys'] as $keyname => $allfields) {
-                $allfields = implode(',',$allfields);
+                $keyname = self::filterName($keyName);
+                $allfields = implode(',',array_map(self::FILTER_FUNC,$allfields));
                 $constraints[] = "UNIQUE KEY $keyname ($allfields)";
             }
         }
@@ -231,12 +246,15 @@ class Schema implements ArrayAccess, Iterator, Countable {
                 $foreignTableName = $this->prefix . $foreignTable['table'];
                 $foreignField = $foreignTable['field'];
                 $fields[] = $this->generateField($field,$foreignTable['key']);
+                list($field,$foreignTableName,$foreignField)
+                    = array_map(self::FILTER_FUNC,[$field,$foreignTableName,$foreignField]);
                 $constraints[] = "FOREIGN KEY ($field) REFERENCES $foreignTableName ($foreignField)";
             }
         }
         if (isset($table['indexes'])) {
             foreach ($table['indexes'] as $indexname => $allfields) {
-                $allfields = implode(',',$allfields);
+                $allfields = implode(',',array_map(self::FILTER_FUNC,$allfields));
+                $indexname = self::filterName($indexname);
                 $constraints[] = "INDEX $indexname ($allfields)";
             }
         }
@@ -307,6 +325,7 @@ class Schema implements ArrayAccess, Iterator, Countable {
             $modifiers[] = 'AUTO_INCREMENT';
         }
         $modifiers = implode(' ',$modifiers);
+        $name = self::filterName($name);
         $sql = "$name $mysqlType $modifiers";
 
         return trim($sql);
