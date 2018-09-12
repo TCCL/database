@@ -178,7 +178,7 @@ class Schema implements ArrayAccess, Iterator, Countable {
      * Implements Iterator::valid().
      */
     public function valid() {
-        return is_null(key($this->schema));
+        return !is_null(key($this->schema));
     }
 
     /**
@@ -235,7 +235,7 @@ class Schema implements ArrayAccess, Iterator, Countable {
             }
         }
         if (isset($table['unique keys'])) {
-            foreach ($table['unique keys'] as $keyname => $allfields) {
+            foreach ($table['unique keys'] as $keyName => $allfields) {
                 $keyname = self::filterName($keyName);
                 $allfields = implode(',',array_map(self::FILTER_FUNC,$allfields));
                 $constraints[] = "UNIQUE KEY $keyname ($allfields)";
