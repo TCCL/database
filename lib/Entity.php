@@ -236,6 +236,7 @@ abstract class Entity {
         // If the caller indicated the entity is synchronized, change the create
         // flag to reflect this.
         if ($synchronized) {
+            $this->existsState = true;
             $this->create = false;
         }
 
