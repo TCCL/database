@@ -217,8 +217,8 @@ class EntityInsertSet implements ArrayAccess, Iterator, Countable {
 
         // Perform the commit query.
         $table = $this->ents[0]->getTable();
-        $fields = implode(',',array_keys($inserts));
-        $this->conn->query("INSERT INTO $table ($fields) VALUES $prepOuter",$values);
+        $fields = implode(',',array_map(function($f){ return "`$f`"; },array_keys($inserts)));
+        $this->conn->query("INSERT INTO `$table` ($fields) VALUES $prepOuter",$values);
 
         // Do any postcommit actions.
         foreach ($this->ents as $entity) {
