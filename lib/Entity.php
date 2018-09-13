@@ -587,6 +587,25 @@ abstract class Entity {
     }
 
     /**
+     * Gets the string representing the query fields for a SELECT query.
+     *
+     * @return string
+     */
+    final protected function getFieldString($tableAlias = null) {
+        if (!isset($tableAlias)) {
+            $tableAlias = $this->table;
+        }
+
+        $fields = array_keys($this->fields);
+        $fields = array_map(function($x) use($tableAlias) {
+            return "`{$tableAlias}`.`{$x}`";
+        }, $fields);
+        $fields = implode(',',$fields);
+
+        return $fields;
+    }
+
+    /**
      * Gets the query used to fetch the entity fields. This may be overridden by
      * derived classes to handle more complicated entity types.
      *
@@ -598,9 +617,7 @@ abstract class Entity {
      */
     protected function getFetchQuery(array &$values) {
         $keyCondition = $this->getKeyString($values);
-        $fields = array_keys($this->fields);
-        $fields = array_map(function($x){ return "`{$this->table}`.`$x`"; },$fields);
-        $fields = implode(',',$fields);
+        $fields = $this->getFieldString();
 
         $query = "SELECT $fields FROM `{$this->table}` WHERE $keyCondition LIMIT 1";
         return $query;
