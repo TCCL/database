@@ -621,10 +621,17 @@ abstract class Entity {
      *
      * @return string
      */
-    final protected function getKeyString(&$values) {
+    final protected function getKeyString(&$values,$tableAlias = null) {
+        if (!isset($tableAlias)) {
+            $tableAlias = $this->table;
+        }
+
         $keys = array_keys($this->keys);
-        $query = implode(' AND ',array_map(function($x){ return "`{$this->table}`.`$x` = ?"; },$keys));
+        $query = implode(' AND ', array_map(function($x) use($tableAlias) {
+            return "`{$tableAlias}`.`$x` = ?";
+        }, $keys));
         $values = array_values($this->keys);
+
         return $query;
     }
 
