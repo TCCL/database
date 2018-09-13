@@ -269,6 +269,27 @@ abstract class Entity {
     }
 
     /**
+     * Marks a field as having been edited without actually making edits. This
+     * is useful for complex field types that cannot report when they are
+     * modified via the __set() object handler.
+     *
+     * @param string $fieldName
+     *  The field name. This may either be the table field name or property name
+     *  (i.e. alias).
+     */
+    final public function touchField($fieldName) {
+        // See if the field name is a property name first so we can resolve
+        // property names.
+        if (isset($this->props[$fieldName])) {
+            $fieldName = $this->props[$fieldName];
+        }
+
+        if (array_key_exists($fieldName,$this->fields)) {
+            $this->updates[$fieldName] = true;
+        }
+    }
+
+    /**
      * Gets the list of inserts for the object. Such a list only exists if the
      * object is in create mode.
      *
