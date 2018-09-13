@@ -524,9 +524,20 @@ abstract class Entity {
      * Invalidates the Entity object to where all fields will be re-fetched at
      * next access.
      */
-    public function invalidate() {
-        $this->fetchState = false;
+    public function invalidate($deleted = false) {
         $this->existsState = false;
+
+        if ($deleted) {
+            $this->fetchState = true;
+            $this->create = true;
+
+            array_walk($this->keys, function(&$value) {
+                $value = null;
+            });
+        }
+        else {
+            $this->fetchState = false;
+        }
     }
 
     /**
