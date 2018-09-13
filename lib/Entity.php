@@ -310,12 +310,17 @@ abstract class Entity {
     /**
      * Commit any pending changes to the database. This must be done explicitly.
      *
+     * @param bool $invalidate
+     *  Determines if the entity is invalidated after commit. The default
+     *  behavior is to invalidate the Entity so that its fields are refetched at
+     *  a later time.
+     *
      * @return bool
      *  Returns true if the entity was successfully updated or created, false
      *  otherwise. If false is returned, then the transaction was rolled back
      *  and the Entity may be in an inconsistent state.
      */
-    public function commit() {
+    public function commit($invalidate = true) {
         // Begin a transaction for the commit process and perform any precommit
         // operation.
         $this->conn->beginTransaction();
@@ -359,7 +364,7 @@ abstract class Entity {
                 }
 
                 // Succeed with no direct changes.
-                $this->endTransaction(false);
+                $this->conn->endTransaction();
                 return true;
             }
 
@@ -409,7 +414,8 @@ abstract class Entity {
                     }
 
                     // Attempt to create the entity recursively. This will
-                    // handle any endTransaction() or rollback() calls.
+                    // handle any endTransaction(), commitSuccess() and/or
+                    // rollback() calls.
                     $this->create = true;
                     return $this->commit();
                 }
@@ -417,13 +423,16 @@ abstract class Entity {
                 // Otherwise we must assume the entity exists but the update had
                 // no changes.
 
+                // Call success function to change state *before* post-commit.
+                $this->commitSuccess($invalidate);
+
                 // Invoke post commit method.
                 if ($this->postCommit($this->create) === false) {
                     $this->rollback();
                     return false;
                 }
 
-                $this->endTransaction();
+                $this->conn->endTransaction();
                 return true;
             }
 
@@ -443,8 +452,8 @@ abstract class Entity {
             $this->fields['id'] = $this->conn->lastInsertId();
         }
 
-        $this->fetchState = false;
-        $this->existsState = true;
+        // Call success function to change state *before* post-commit.
+        $this->commitSuccess($invalidate);
 
         // Invoke post commit method.
         if ($this->postCommit($this->create) === false) {
@@ -452,7 +461,7 @@ abstract class Entity {
             return false;
         }
 
-        $this->endTransaction();
+        $this->conn->endTransaction();
         unset($this->updates);
         return true;
     }
@@ -697,16 +706,16 @@ abstract class Entity {
     }
 
     /**
-     * Called when a commit() succeeds.
+     * Called when a commit() succeeds and had changes.
      *
-     * @param bool $hadChanges
-     *  True if the commit() issued an UPDATE or INSERT.
+     * @param bool $invalidate
+     *  Determines if the entity is invalidated after commit. The default
+     *  behavior is to invalidate the Entity so that its fields are refetched at
+     *  a later time.
      */
-    private function endTransaction($hadChanges = true) {
-        if ($hadChanges) {
-            $this->fetchState = false;
-            $this->existsState = true;
-        }
-        $this->conn->endTransaction();
+    private function commitSuccess($invalidate = true) {
+        $this->fetchState = !$invalidate;
+        $this->existsState = true;
+        $this->create = false;
     }
 }
