@@ -155,7 +155,7 @@ abstract class Entity {
      *
      * @return bool
      */
-    public function exists() {
+    final public function exists() {
         // NOTE: The existsState may be independent of the fetchState.
         if (!$this->__info['existsState']) {
             $this->sync();
@@ -170,7 +170,7 @@ abstract class Entity {
      * @param bool $state
      *  The flag to set.
      */
-    public function setUpdateOnly($state = true) {
+    final public function setUpdateOnly($state = true) {
         $this->__info['updateOnly'] = $state;
     }
 
@@ -179,7 +179,7 @@ abstract class Entity {
      *
      * @return DatabaseConnection
      */
-    public function getConnection() {
+    final public function getConnection() {
         return $this->__info['conn'];
     }
 
@@ -188,12 +188,13 @@ abstract class Entity {
      *
      * @return string
      */
-    public function getTable() {
+    final public function getTable() {
         return $this->__info['table'];
     }
 
     /**
-     * Gets the complete set of fields representing the entity.
+     * Gets the complete set of fields representing the entity. The values
+     * represent the most current state of the entity object.
      *
      * @param bool $userPropertyNames
      *  If true then the keys in the array are the property names instead of the
@@ -202,33 +203,40 @@ abstract class Entity {
      * @return array
      *  An associative array mapping field names to field values.
      */
-    public function getFields($usePropertyNames = true) {
+    final public function getFields($usePropertyNames = true) {
         $this->sync();
+
+        $fields = $this->lookupFields();
+
         if ($usePropertyNames) {
             $result = [];
+
             foreach ($this->__info['props'] as $propName => $fieldName) {
-                $result[$propName] = $this->__info['fields'][$fieldName];
+                $result[$propName] = $fields[$fieldName];
             }
-            return $result;
+        }
+        else {
+            $result = $fields;
         }
 
-        return $this->__info['fields'];
+        return $result;
     }
 
     /**
      * Gets the complete set of field names for the entity.
      *
-     * @param bool $userPropertyNames
+     * @param bool $usePropertyNames
      *  If true then the keys in the array are the property names instead of the
      *  database table names.
      *
      * @return array
      *  An indexed array containing the field names.
      */
-    public function getFieldNames($usePropertyNames = true) {
+    final public function getFieldNames($usePropertyNames = true) {
         if ($usePropertyNames) {
             return array_keys($this->__info['props']);
         }
+
         return array_values($this->__info['props']);
     }
 
@@ -255,6 +263,8 @@ abstract class Entity {
             $this->__info['create'] = false;
         }
 
+        $apply = [];
+
         foreach ($fields as $key => $value) {
             // Set key value if found.
             if (array_key_exists($key,$this->__info['keys'])) {
@@ -275,18 +285,20 @@ abstract class Entity {
                     $value = $this->__info['filters'][$key]($value);
                 }
 
-                $this->__info['fields'][$key] = $value;
-                if (!$synchronized) {
-                    $this->__info['updates'][$key] = true;
-                }
+                $apply[$key] = $value;
             }
         }
+
+        $this->applyFields($apply,$synchronized);
     }
 
     /**
      * Marks a field as having been edited without actually making edits. This
      * is useful for complex field types that cannot report when they are
      * modified via the __set() object handler.
+     *
+     * NOTE: this method is only useful for Entities that derive directly from
+     * TCCL\Database\Entity.
      *
      * @param string $fieldName
      *  The field name. This may either be the table field name or property name
@@ -302,46 +314,6 @@ abstract class Entity {
         if (array_key_exists($fieldName,$this->__info['fields'])) {
             $this->__info['updates'][$fieldName] = true;
         }
-    }
-
-    /**
-     * Gets the list of inserts for the object. Such a list only exists if the
-     * object is in create mode.
-     *
-     * @param array &$values
-     *  Appends the values to insert to the specified array.
-     *
-     * @return array
-     *  Returns the list of insert fields as an associative array whose keys
-     *  represent the fields to insert.
-     */
-    final public function getInserts(array &$values) {
-        if (!$this->__info['create']) {
-            return false;
-        }
-
-        if (!isset($this->__info['updates'])) {
-            return false;
-        }
-
-        // Process any specified updates as field inserts.
-        foreach ($this->__info['updates'] as $key => &$value) {
-            $value = $this->__info['fields'][$key];
-            $values[] = $this->__info['fields'][$key];
-        }
-        unset($value);
-
-        // Add any non-null keys to the list of inserts. We'll assume null
-        // keys are defaulted or auto-incremented in some way by the DB
-        // engine.
-        foreach ($this->__info['keys'] as $key => $value) {
-            if (!is_null($value) && !isset($this->__info['updates'][$key])) {
-                $this->__info['updates'][$key] = true;
-                $values[] = $value;
-            }
-        }
-
-        return $this->__info['updates'];
     }
 
     /**
@@ -376,25 +348,25 @@ abstract class Entity {
                 return false;
             }
 
-            // Get inserts information.
-            $values = [];
-            $inserts = $this->getInserts($values);
-            if ($inserts === false) {
+            // Get dirty fields to insert information.
+            $fieldNames = $this->getDirtyFields($values);
+            if ($fieldNames === false) {
                 $this->rollback();
                 return false;
             }
-            $fieldNames = array_keys($inserts);
 
             // Build the query.
             $fields = implode(',',array_map(function($x){ return "`$x`"; },$fieldNames));
-            $prep = '?' . str_repeat(',?',count($inserts)-1);
+            $prep = '?' . str_repeat(',?',count($fieldNames)-1);
             $query = "INSERT INTO `{$this->__info['table']}` ($fields) VALUES ($prep)";
         }
         else {
+            $fieldNames = $this->getDirtyFields($values);
+
             // Abort operation if no updates are available. We still invoke the
             // postCommit() hook since the commit is semantically correct but
             // just empty.
-            if (!isset($this->__info['updates'])) {
+            if ($fieldNames === false) {
                 if ($this->postCommit(false) === false) {
                     $this->rollback();
                     return false;
@@ -406,10 +378,6 @@ abstract class Entity {
             }
 
             // Process the set of updates and prepared values for the query.
-            $fieldNames = array_keys($this->__info['updates']);
-            foreach ($fieldNames as $name) {
-                $values[] = $this->__info['fields'][$name];
-            }
             $keyCondition = $this->getKeyString($keyvals);
             $values = array_merge($values,$keyvals);
 
@@ -470,6 +438,7 @@ abstract class Entity {
                 }
 
                 $this->__info['conn']->endTransaction();
+
                 return true;
             }
 
@@ -486,7 +455,7 @@ abstract class Entity {
             $this->__info['keys']['id'] = $this->__info['conn']->lastInsertId();
         }
         if (array_key_exists('id',$this->__info['fields'])) {
-            $this->__info['fields']['id'] = $this->__info['conn']->lastInsertId();
+            $this->applyFields(['id' => $this->__info['conn']->lastInsertId()],true);
         }
 
         // Call success function to change state *before* post-commit.
@@ -499,7 +468,9 @@ abstract class Entity {
         }
 
         $this->__info['conn']->endTransaction();
+        $this->syncDirtyFields();
         unset($this->__info['updates']);
+
         return true;
     }
 
@@ -507,7 +478,7 @@ abstract class Entity {
      * Performs the fetch operation. This overwrites all field values currently
      * available.
      */
-    public function sync() {
+    final public function sync() {
         if (!$this->__info['fetchState']) {
             $values = [];
             $query = $this->getFetchQuery($values);
@@ -594,6 +565,9 @@ abstract class Entity {
      * class for the fields it wants to include as a part of its interface. Each
      * field is provided as a property of the object.
      *
+     * NOTE: this method is only useful for Entities that derive directly from
+     * TCCL\Database\Entity.
+     *
      * @param string $field
      *  The field name corresponding to the database field name. This *must* be
      *  a field in the entity type's corresponding table.
@@ -621,6 +595,38 @@ abstract class Entity {
         if (is_callable($filter)) {
             $this->__info['filters'][$field] = $filter;
         }
+    }
+
+    /**
+     * Registers all fields in one call.
+     *
+     * @param array $fields
+     *  The array of fields to set. Each element has the following structure:
+     *   - field_name
+     *   - prop_name
+     *   - default_value
+     *   - filter
+     */
+    final protected function registerAllFields(array $fields) {
+        foreach ($fields as $fieldInfo) {
+            $fieldInfo += [
+                'prop_name' => null,
+                'default_value' => null,
+                'filter' => null,
+            ];
+
+            $this->registerField(
+                $fieldInfo['field_name'],
+                $fieldInfo['prop_name'],
+                $fieldInfo['default_value'],
+                $fieldInfo['filter']);
+        }
+    }
+
+    final protected function setFieldInfo(array $fields,array $props,array $filters) {
+        $this->__info['fields'] = $fields;
+        $this->__info['props'] = $props;
+        $this->__info['filters'] = $filters;
     }
 
     final protected function getKeys() {
@@ -667,6 +673,73 @@ abstract class Entity {
         $fields = implode(',',$fields);
 
         return $fields;
+    }
+
+    /**
+     * Gets the set of fields that are dirty (i.e. modified in-between syncs).
+     *
+     * @param array &$values
+     *  The method returns the field values in this variable.
+     *
+     * @return array
+     *  The method returns the field keys, or false if no fields were dirty.
+     */
+    protected function getDirtyFields(&$values) {
+        // Use the 'updates' state to obtain list of dirty fields.
+
+        // Process any specified updates as field inserts.
+        foreach (array_keys($this->__info['updates']) as $key) {
+            $values[] = $this->__info['fields'][$key];
+        }
+
+        // Add any non-null keys to the list of inserts. We'll assume null
+        // keys are defaulted or auto-incremented in some way by the DB
+        // engine.
+        foreach ($this->__info['keys'] as $key => $value) {
+            if (!is_null($value) && !isset($this->__info['updates'][$key])) {
+                $this->__info['updates'][$key] = true;
+                $values[] = $value;
+            }
+        }
+
+        return array_keys($this->__info['updates']);
+    }
+
+    /**
+     * Looks up the field values.
+     *
+     * @return array
+     *  An associative array mapping field names to values.
+     */
+    protected function lookupFields() {
+        return $this->__info['fields'];
+    }
+
+    /**
+     * Applies a subset of the entity fields to the entity's field store.
+     *
+     * @param array $fields
+     *  The fields to apply. The keys are the field names and the values are the
+     *  field values.
+     * @param bool $synchronized
+     *  Determines if field values should be considered synchronized with the
+     *  database backend.
+     */
+    protected function applyFields($fields,$synchronized = true) {
+        foreach ($fields as $key => $value) {
+            $this->__info['fields'][$key] = $value;
+            if ($dirty) {
+                $this->__info['updates'][$key] = true;
+            }
+        }
+    }
+
+    /**
+     * Clears the entity's update state.
+     */
+    protected function syncDirtyFields() {
+        // Nothing to do in this implementation since dirty fields are stored on
+        // top of original field values.
     }
 
     /**
