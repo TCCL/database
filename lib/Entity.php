@@ -23,86 +23,101 @@ use Exception;
  */
 abstract class Entity {
     /**
-     * The database connection.
-     *
-     * @var DatabaseConnection
-     */
-    private $conn;
-
-    /**
-     * The table in the database that represents the entity type.
-     *
-     * @var string
-     */
-    private $table;
-
-    /**
-     * The key or keys involved in querying a specific entity. Each element maps
-     * a key name to the expected value.
+     * Store all instance state in this bucket to free up property names in
+     * derived classes.
      *
      * @var array
      */
-    private $keys;
+    private $__info = [
+        /**
+         * The database connection.
+         *
+         * @var DatabaseConnection
+         */
+        'conn' => null,
 
-    /**
-     * The properties exposed by the model. The keys are the property names and
-     * the values are the field names to which they correspond respectively.
-     *
-     * @var array
-     */
-    private $props;
+        /**
+         * The table in the database that represents the entity type.
+         *
+         * @var string
+         */
+        'table' => null,
 
-    /**
-     * An associative array mapping field names to their values in the model.
-     *
-     * @var array
-     */
-    private $fields;
+        /**
+         * The key or keys involved in querying a specific entity. Each element
+         * maps a key name to the expected value.
+         *
+         * @var array
+         */
+        'keys' => null,
 
-    /**
-     * An associative array whose keys represent the set of fields to update.
-     *
-     * @var array
-     */
-    private $updates;
+        /**
+         * The properties exposed by the model. The keys are the property names
+         * and the values are the field names to which they correspond
+         * respectively.
+         *
+         * @var array
+         */
+        'props' => null,
 
-    /**
-     * The set of filters to apply (if any) to values fetched from the database.
-     *
-     * @var array
-     */
-    private $filters;
+        /**
+         * An associative array mapping field names to their values in the
+         * model.
+         *
+         * @var array
+         */
+        'fields' => null,
 
-    /**
-     * Determines whether the fields have been fetched. Typically this is only
-     * done once in the object's lifetime unless it is invalidated.
-     *
-     * @var bool
-     */
-    private $fetchState = false;
+        /**
+         * An associative array whose keys represent the set of fields to
+         * update.
+         *
+         * @var array
+         */
+        'updates' => null,
 
-    /**
-     * Determines whether the entity is expected to be created or updated.
-     *
-     * @var bool
-     */
-    private $create;
+        /**
+         * The set of filters to apply (if any) to values fetched from the
+         * database. This is an associative array mapping field names to
+         * callables.
+         *
+         * @var array
+         */
+        'filters' => null,
 
-    /**
-     * Caches whether the entity exists. This is essentially whether at least
-     * one field is set.
-     *
-     * @var bool
-     */
-    private $existsState = false;
+        /**
+         * Determines whether the fields have been fetched. Typically this is
+         * only done once in the object's lifetime unless it is invalidated.
+         *
+         * @var bool
+         */
+        'fetchState' => false,
 
-    /**
-     * Determines whether the entity is expected to already exist. By default we
-     * don't care and will attempt to UPDATE or INSERT the entity as needed.
-     *
-     * @var bool
-     */
-    private $updateOnly = false;
+        /**
+         * Determines whether the entity is expected to be created or updated.
+         *
+         * @var bool
+         */
+        'create' => null,
+
+        /**
+         * Caches whether the entity exists. This is essentially whether at
+         * least one field is set.
+         *
+         * @var bool
+         */
+        'existsState' => false,
+
+        /**
+         * Determines whether the entity is expected to already exist. By
+         * default we don't care and will attempt to UPDATE or INSERT the entity
+         * as needed.
+         *
+         * @var bool
+         */
+        'updateOnly' => false,
+
+    ]; // $__info
 
     /**
      * Overloads for special handlers.
@@ -110,19 +125,19 @@ abstract class Entity {
 
     public function __get($propertyName) {
         $this->sync();
-        if (isset($this->props[$propertyName])) {
-            return $this->fields[$this->props[$propertyName]];
+        if (isset($this->__info['props'][$propertyName])) {
+            return $this->__info['fields'][$this->__info['props'][$propertyName]];
         }
 
         trigger_error("Undefined entity property: $propertyName",E_USER_NOTICE);
     }
 
     public function __set($propertyName,$value) {
-        if (isset($this->props[$propertyName])) {
-            $fieldName = $this->props[$propertyName];
-            $this->fields[$fieldName] = $value;
-            $this->updates[$fieldName] = true;
-            $this->fetchState = true;
+        if (isset($this->__info['props'][$propertyName])) {
+            $fieldName = $this->__info['props'][$propertyName];
+            $this->__info['fields'][$fieldName] = $value;
+            $this->__info['updates'][$fieldName] = true;
+            $this->__info['fetchState'] = true;
             return;
         }
 
@@ -132,7 +147,7 @@ abstract class Entity {
     public function __isset($field) {
         // Make sure the property is registered and it's value is set.
         $this->sync();
-        return isset($this->props[$field]) && isset($this->fields[$this->props[$field]]);
+        return isset($this->__info['props'][$field]) && isset($this->__info['fields'][$this->__info['props'][$field]]);
     }
 
     /**
@@ -142,11 +157,11 @@ abstract class Entity {
      */
     public function exists() {
         // NOTE: The existsState may be independent of the fetchState.
-        if (!$this->existsState) {
+        if (!$this->__info['existsState']) {
             $this->sync();
         }
 
-        return $this->existsState;
+        return $this->__info['existsState'];
     }
 
     /**
@@ -156,7 +171,7 @@ abstract class Entity {
      *  The flag to set.
      */
     public function setUpdateOnly($state = true) {
-        $this->updateOnly = $state;
+        $this->__info['updateOnly'] = $state;
     }
 
     /**
@@ -165,7 +180,7 @@ abstract class Entity {
      * @return DatabaseConnection
      */
     public function getConnection() {
-        return $this->conn;
+        return $this->__info['conn'];
     }
 
     /**
@@ -174,7 +189,7 @@ abstract class Entity {
      * @return string
      */
     public function getTable() {
-        return $this->table;
+        return $this->__info['table'];
     }
 
     /**
@@ -191,13 +206,13 @@ abstract class Entity {
         $this->sync();
         if ($usePropertyNames) {
             $result = [];
-            foreach ($this->props as $propName => $fieldName) {
-                $result[$propName] = $this->fields[$fieldName];
+            foreach ($this->__info['props'] as $propName => $fieldName) {
+                $result[$propName] = $this->__info['fields'][$fieldName];
             }
             return $result;
         }
 
-        return $this->fields;
+        return $this->__info['fields'];
     }
 
     /**
@@ -212,9 +227,9 @@ abstract class Entity {
      */
     public function getFieldNames($usePropertyNames = true) {
         if ($usePropertyNames) {
-            return array_keys($this->props);
+            return array_keys($this->__info['props']);
         }
-        return array_values($this->props);
+        return array_values($this->__info['props']);
     }
 
     /**
@@ -231,38 +246,38 @@ abstract class Entity {
      */
     final public function setFields(array $fields,$synchronized = true) {
         // Always set the fetchState to true to avoid overwriting the fields.
-        $this->fetchState = true;
+        $this->__info['fetchState'] = true;
 
         // If the caller indicated the entity is synchronized, change the create
         // flag to reflect this.
         if ($synchronized) {
-            $this->existsState = true;
-            $this->create = false;
+            $this->__info['existsState'] = true;
+            $this->__info['create'] = false;
         }
 
         foreach ($fields as $key => $value) {
             // Set key value if found.
-            if (array_key_exists($key,$this->keys)) {
-                $this->keys[$key] = $value;
+            if (array_key_exists($key,$this->__info['keys'])) {
+                $this->__info['keys'][$key] = $value;
             }
 
             // See if the key is a property name. If so then map it to its
             // corresponding field name.
-            if (isset($this->props[$key])) {
-                $key = $this->props[$key];
+            if (isset($this->__info['props'][$key])) {
+                $key = $this->__info['props'][$key];
             }
 
             // Set field value if found.
-            if (array_key_exists($key,$this->fields)) {
+            if (array_key_exists($key,$this->__info['fields'])) {
                 // See if we can first filter the value. Only filter non-null
                 // values.
-                if (isset($this->filters[$key],$value)) {
-                    $value = $this->filters[$key]($value);
+                if (isset($this->__info['filters'][$key],$value)) {
+                    $value = $this->__info['filters'][$key]($value);
                 }
 
-                $this->fields[$key] = $value;
+                $this->__info['fields'][$key] = $value;
                 if (!$synchronized) {
-                    $this->updates[$key] = true;
+                    $this->__info['updates'][$key] = true;
                 }
             }
         }
@@ -280,12 +295,12 @@ abstract class Entity {
     final public function touchField($fieldName) {
         // See if the field name is a property name first so we can resolve
         // property names.
-        if (isset($this->props[$fieldName])) {
-            $fieldName = $this->props[$fieldName];
+        if (isset($this->__info['props'][$fieldName])) {
+            $fieldName = $this->__info['props'][$fieldName];
         }
 
-        if (array_key_exists($fieldName,$this->fields)) {
-            $this->updates[$fieldName] = true;
+        if (array_key_exists($fieldName,$this->__info['fields'])) {
+            $this->__info['updates'][$fieldName] = true;
         }
     }
 
@@ -301,32 +316,32 @@ abstract class Entity {
      *  represent the fields to insert.
      */
     final public function getInserts(array &$values) {
-        if (!$this->create) {
+        if (!$this->__info['create']) {
             return false;
         }
 
-        if (!isset($this->updates)) {
+        if (!isset($this->__info['updates'])) {
             return false;
         }
 
         // Process any specified updates as field inserts.
-        foreach ($this->updates as $key => &$value) {
-            $value = $this->fields[$key];
-            $values[] = $this->fields[$key];
+        foreach ($this->__info['updates'] as $key => &$value) {
+            $value = $this->__info['fields'][$key];
+            $values[] = $this->__info['fields'][$key];
         }
         unset($value);
 
         // Add any non-null keys to the list of inserts. We'll assume null
         // keys are defaulted or auto-incremented in some way by the DB
         // engine.
-        foreach ($this->keys as $key => $value) {
-            if (!is_null($value) && !isset($this->updates[$key])) {
-                $this->updates[$key] = true;
+        foreach ($this->__info['keys'] as $key => $value) {
+            if (!is_null($value) && !isset($this->__info['updates'][$key])) {
+                $this->__info['updates'][$key] = true;
                 $values[] = $value;
             }
         }
 
-        return $this->updates;
+        return $this->__info['updates'];
     }
 
     /**
@@ -345,18 +360,18 @@ abstract class Entity {
     public function commit($invalidate = true) {
         // Begin a transaction for the commit process and perform any precommit
         // operation.
-        $this->conn->beginTransaction();
-        if ($this->preCommit($this->create) === false) {
+        $this->__info['conn']->beginTransaction();
+        if ($this->preCommit($this->__info['create']) === false) {
             $this->rollback();
             return false;
         }
 
-        if ($this->create) {
+        if ($this->__info['create']) {
             // NOTE: If update-only is flagged or if there are no inserts to
             // process, postCommit() hook is not called because a commit is
             // semantically incorrect. In this instance we just do a rollback.
 
-            if ($this->updateOnly) {
+            if ($this->__info['updateOnly']) {
                 $this->rollback();
                 return false;
             }
@@ -373,27 +388,27 @@ abstract class Entity {
             // Build the query.
             $fields = implode(',',array_map(function($x){ return "`$x`"; },$fieldNames));
             $prep = '?' . str_repeat(',?',count($inserts)-1);
-            $query = "INSERT INTO `{$this->table}` ($fields) VALUES ($prep)";
+            $query = "INSERT INTO `{$this->__info['table']}` ($fields) VALUES ($prep)";
         }
         else {
             // Abort operation if no updates are available. We still invoke the
             // postCommit() hook since the commit is semantically correct but
             // just empty.
-            if (!isset($this->updates)) {
+            if (!isset($this->__info['updates'])) {
                 if ($this->postCommit(false) === false) {
                     $this->rollback();
                     return false;
                 }
 
                 // Succeed with no direct changes.
-                $this->conn->endTransaction();
+                $this->__info['conn']->endTransaction();
                 return true;
             }
 
             // Process the set of updates and prepared values for the query.
-            $fieldNames = array_keys($this->updates);
+            $fieldNames = array_keys($this->__info['updates']);
             foreach ($fieldNames as $name) {
-                $values[] = $this->fields[$name];
+                $values[] = $this->__info['fields'][$name];
             }
             $keyCondition = $this->getKeyString($keyvals);
             $values = array_merge($values,$keyvals);
@@ -401,7 +416,7 @@ abstract class Entity {
             // Build the query.
             $fields = implode(',',array_map(function($x){ return "`$x` = ?"; },
                                             $fieldNames));
-            $query = "UPDATE `{$this->table}` SET $fields WHERE $keyCondition LIMIT 1";
+            $query = "UPDATE `{$this->__info['table']}` SET $fields WHERE $keyCondition LIMIT 1";
         }
 
         // Allow derived classes to modify field values before commit through
@@ -412,23 +427,23 @@ abstract class Entity {
         $this->processCommitFields($processing);
 
         // Perform the query.
-        $stmt = $this->conn->query($query,$values);
+        $stmt = $this->__info['conn']->query($query,$values);
 
         if ($stmt->rowCount() < 1) {
-            if (!$this->create) {
+            if (!$this->__info['create']) {
                 // If the row count is less than one on UPDATE, then several
                 // things may have happened: 1) The entity exists but none of
                 // the fields were actually updated or 2) the entity does not
                 // exist. We must call exists() to resolve the ambiguity.
 
-                if (!$this->existsState) {
+                if (!$this->__info['existsState']) {
                     // If we do not know if the entity exists, we must ensure we
                     // can do a fetch to make the determination.
-                    $this->fetchState = false;
+                    $this->__info['fetchState'] = false;
                 }
 
                 if (!$this->exists()) {
-                    if ($this->updateOnly) {
+                    if ($this->__info['updateOnly']) {
                         // The commit fails if the entity does not exist when in
                         // update-only mode.
                         $this->rollback();
@@ -438,7 +453,7 @@ abstract class Entity {
                     // Attempt to create the entity recursively. This will
                     // handle any endTransaction(), commitSuccess() and/or
                     // rollback() calls.
-                    $this->create = true;
+                    $this->__info['create'] = true;
                     return $this->commit();
                 }
 
@@ -449,12 +464,12 @@ abstract class Entity {
                 $this->commitSuccess($invalidate);
 
                 // Invoke post commit method.
-                if ($this->postCommit($this->create) === false) {
+                if ($this->postCommit($this->__info['create']) === false) {
                     $this->rollback();
                     return false;
                 }
 
-                $this->conn->endTransaction();
+                $this->__info['conn']->endTransaction();
                 return true;
             }
 
@@ -467,24 +482,24 @@ abstract class Entity {
 
         // Handle insert ID updates. We do this conventionally for keys and
         // fields with the name 'id'.
-        if (array_key_exists('id',$this->keys) && is_null($this->keys['id'])) {
-            $this->keys['id'] = $this->conn->lastInsertId();
+        if (array_key_exists('id',$this->__info['keys']) && is_null($this->__info['keys']['id'])) {
+            $this->__info['keys']['id'] = $this->__info['conn']->lastInsertId();
         }
-        if (array_key_exists('id',$this->fields)) {
-            $this->fields['id'] = $this->conn->lastInsertId();
+        if (array_key_exists('id',$this->__info['fields'])) {
+            $this->__info['fields']['id'] = $this->__info['conn']->lastInsertId();
         }
 
         // Call success function to change state *before* post-commit.
         $this->commitSuccess($invalidate);
 
         // Invoke post commit method.
-        if ($this->postCommit($this->create) === false) {
+        if ($this->postCommit($this->__info['create']) === false) {
             $this->rollback();
             return false;
         }
 
-        $this->conn->endTransaction();
-        unset($this->updates);
+        $this->__info['conn']->endTransaction();
+        unset($this->__info['updates']);
         return true;
     }
 
@@ -493,20 +508,20 @@ abstract class Entity {
      * available.
      */
     public function sync() {
-        if (!$this->fetchState) {
+        if (!$this->__info['fetchState']) {
             $values = [];
             $query = $this->getFetchQuery($values);
-            $stmt = $this->conn->query($query,$values);
+            $stmt = $this->__info['conn']->query($query,$values);
 
             $newfields = $stmt->fetch(PDO::FETCH_ASSOC);
-            $this->fetchState = true;
+            $this->__info['fetchState'] = true;
 
             // If we didn't get any results, we can assume the entity doesn't
             // exist. In this case we'll want to enter create mode so that any
             // future commit won't attempt an UPDATE but skip to an INSERT.
             if (!is_array($newfields)) {
-                $this->create = true;
-                $this->existsState = false;
+                $this->__info['create'] = true;
+                $this->__info['existsState'] = false;
             }
             else {
                 // Allow derived functionality the chance to process the fields.
@@ -515,7 +530,7 @@ abstract class Entity {
                 // Update fields with new fetch results.
                 $this->setFields($newfields);
 
-                $this->existsState = true;
+                $this->__info['existsState'] = true;
             }
         }
     }
@@ -525,18 +540,18 @@ abstract class Entity {
      * next access.
      */
     public function invalidate($deleted = false) {
-        $this->existsState = false;
+        $this->__info['existsState'] = false;
 
         if ($deleted) {
-            $this->fetchState = true;
-            $this->create = true;
+            $this->__info['fetchState'] = true;
+            $this->__info['create'] = true;
 
-            array_walk($this->keys, function(&$value) {
+            array_walk($this->__info['keys'], function(&$value) {
                 $value = null;
             });
         }
         else {
-            $this->fetchState = false;
+            $this->__info['fetchState'] = false;
         }
     }
 
@@ -558,19 +573,19 @@ abstract class Entity {
      *  exist and an attempt will be made to fetch fields.
      */
     protected function __construct(DatabaseConnection $conn,$table,array $keys,$create = false) {
-        $this->conn = $conn;
-        $this->table = $table;
-        $this->keys = $keys;
+        $this->__info['conn'] = $conn;
+        $this->__info['table'] = $table;
+        $this->__info['keys'] = $keys;
 
         // Force create if specified or if null appears as one of the key
         // values.
         if (in_array(null,array_values($keys))) {
-            $this->create = true;
-            $this->fetchState = true;
+            $this->__info['create'] = true;
+            $this->__info['fetchState'] = true;
         }
         else {
-            $this->create = $create;
-            $this->fetchState = $create;
+            $this->__info['create'] = $create;
+            $this->__info['fetchState'] = $create;
         }
     }
 
@@ -601,15 +616,15 @@ abstract class Entity {
             return;
         }
 
-        $this->fields[$field] = $default;
-        $this->props[$propertyName] = $field;
+        $this->__info['fields'][$field] = $default;
+        $this->__info['props'][$propertyName] = $field;
         if (is_callable($filter)) {
-            $this->filters[$field] = $filter;
+            $this->__info['filters'][$field] = $filter;
         }
     }
 
     final protected function getKeys() {
-        return $this->keys;
+        return $this->__info['keys'];
     }
 
     /**
@@ -623,14 +638,14 @@ abstract class Entity {
      */
     final protected function getKeyString(&$values,$tableAlias = null) {
         if (!isset($tableAlias)) {
-            $tableAlias = $this->table;
+            $tableAlias = $this->__info['table'];
         }
 
-        $keys = array_keys($this->keys);
+        $keys = array_keys($this->__info['keys']);
         $query = implode(' AND ', array_map(function($x) use($tableAlias) {
             return "`{$tableAlias}`.`$x` = ?";
         }, $keys));
-        $values = array_values($this->keys);
+        $values = array_values($this->__info['keys']);
 
         return $query;
     }
@@ -642,10 +657,10 @@ abstract class Entity {
      */
     final protected function getFieldString($tableAlias = null) {
         if (!isset($tableAlias)) {
-            $tableAlias = $this->table;
+            $tableAlias = $this->__info['table'];
         }
 
-        $fields = array_keys($this->fields);
+        $fields = array_keys($this->__info['fields']);
         $fields = array_map(function($x) use($tableAlias) {
             return "`{$tableAlias}`.`{$x}`";
         }, $fields);
@@ -668,7 +683,7 @@ abstract class Entity {
         $keyCondition = $this->getKeyString($values);
         $fields = $this->getFieldString();
 
-        $query = "SELECT $fields FROM `{$this->table}` WHERE $keyCondition LIMIT 1";
+        $query = "SELECT $fields FROM `{$this->__info['table']}` WHERE $keyCondition LIMIT 1";
         return $query;
     }
 
@@ -742,7 +757,7 @@ abstract class Entity {
      */
     private function rollback() {
         $this->invalidate();
-        $this->conn->rollback();
+        $this->__info['conn']->rollback();
     }
 
     /**
@@ -754,8 +769,8 @@ abstract class Entity {
      *  a later time.
      */
     private function commitSuccess($invalidate = true) {
-        $this->fetchState = !$invalidate;
-        $this->existsState = true;
-        $this->create = false;
+        $this->__info['fetchState'] = !$invalidate;
+        $this->__info['existsState'] = true;
+        $this->__info['create'] = false;
     }
 }
