@@ -687,6 +687,10 @@ abstract class Entity {
     protected function getDirtyFields(&$values) {
         // Use the 'updates' state to obtain list of dirty fields.
 
+        if (!isset($this->__info['updates']) || count($this->__info['updates']) == 0) {
+            return false;
+        }
+
         // Process any specified updates as field inserts.
         foreach (array_keys($this->__info['updates']) as $key) {
             $values[] = $this->__info['fields'][$key];
