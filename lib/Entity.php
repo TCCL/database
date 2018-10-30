@@ -728,7 +728,7 @@ abstract class Entity {
     protected function applyFields($fields,$synchronized = true) {
         foreach ($fields as $key => $value) {
             $this->__info['fields'][$key] = $value;
-            if ($dirty) {
+            if (!$synchronized) {
                 $this->__info['updates'][$key] = true;
             }
         }
