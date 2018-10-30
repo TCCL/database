@@ -26,7 +26,7 @@ trait ReflectionEntityTrait {
         // Lookup key values on object properties.
         $keys = array_fill_keys($entry['keys'],null);
         foreach ($entry['keys'] as $key) {
-            $prop = $entry['props'][$key];
+            $prop = $this->__reverseProps[$key];
             $keys[$key] = $this->$prop;
         }
 
