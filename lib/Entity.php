@@ -395,7 +395,12 @@ abstract class Entity {
         $this->processCommitFields($processing);
 
         // Perform the query.
-        $stmt = $this->__info['conn']->query($query,$values);
+        try {
+            $stmt = $this->__info['conn']->query($query,$values);
+        } catch (\Exception $ex) {
+            $this->rollback();
+            throw $ex;
+        }
 
         if ($stmt->rowCount() < 1) {
             if (!$this->__info['create']) {
