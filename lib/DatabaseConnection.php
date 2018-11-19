@@ -202,6 +202,9 @@ class DatabaseConnection {
         if (--self::$transactionCounters[$this->key] == 0) {
             $this->pdo()->commit();
         }
+        if (self::$transactionCounters[$this->key] < 0) {
+            self::$transactionCounters[$this->key] = 0;
+        }
     }
 
     /**
