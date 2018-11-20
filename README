@@ -1,4 +1,4 @@
-database - v1.5.0
+database - v1.6.0
 --------------------------------------------------------------------------------
 This library provides a really simple PDO database connection wrapper in
 addition to providing several database abstraction mechanisms for representing
@@ -35,6 +35,12 @@ Classes
 
     TCCL\Database\Schema
         Provides abstraction for defining and installing schemas
+
+    TCCL\Database\ReflectionEntity
+        Provides an Entity abstraction where metadata is obtained from doc comments
+
+    TCCL\Database\ReflectionEntityTrait
+        Used with ReflectionEntity
 
 --------------------------------------------------------------------------------
 Usage
@@ -291,6 +297,60 @@ Special features:
 
 This class provides a convenience abstraction to insert multiple entities at
 once. However it is not possible to reliably determine the insert IDs this way.
+
+[ReflectionEntity]
+
+Works like Entity but uses reflection to gather table/field metadata. In this
+way, you do not register individual fields but supply doc comments that denote
+the entity fields/table info.
+
+When you subclass a ReflectionEntity, you must use the ReflectionEntityTrait in
+the same class.
+
+/**
+ * Represents a 'fruit' entity.
+ *
+ * @table fruit_record
+ */
+class Fruit extends ReflectionEntity {
+    use ReflectionEntityTrait;
+
+    /**
+     * The entity ID.
+     *
+     * @field id
+     * @key
+     */
+    private $id;
+
+    /**
+     * The fruit's common name.
+     *
+     * @field common_name
+     */
+    private $name;
+
+    /**
+     * The fruit's scientific name.
+     *
+     * @field scientific_name
+     */
+    private $scientificName;
+
+    /**
+     * The number of calories.
+     *
+     * @field calories
+     */
+    private $calories;
+
+    public function __construct($id = null) {
+        $this->id = $id;
+
+        $db = /* Get DatabaseConnection instance... */;
+        parent::__construct($db);
+    }
+}
 
 [Schema]
 
