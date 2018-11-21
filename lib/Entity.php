@@ -323,16 +323,20 @@ abstract class Entity {
      *  Determines if the entity is invalidated after commit. The default
      *  behavior is to invalidate the Entity so that its fields are refetched at
      *  a later time.
+     * @param bool $recursive
+     *  Used by the implementation.
      *
      * @return bool
      *  Returns true if the entity was successfully updated or created, false
      *  otherwise. If false is returned, then the transaction was rolled back
      *  and the Entity may be in an inconsistent state.
      */
-    public function commit($invalidate = true) {
+    public function commit($invalidate = true,$recursive = false) {
         // Begin a transaction for the commit process and perform any precommit
         // operation.
-        $this->__info['conn']->beginTransaction();
+        if (!$recursive) {
+            $this->__info['conn']->beginTransaction();
+        }
         if ($this->preCommit($this->__info['create']) === false) {
             $this->rollback();
             return false;
@@ -367,6 +371,9 @@ abstract class Entity {
             // postCommit() hook since the commit is semantically correct but
             // just empty.
             if ($fieldNames === false) {
+                // Call success function to change state *before* post-commit.
+                $this->commitSuccess($invalidate);
+
                 if ($this->postCommit(false) === false) {
                     $this->rollback();
                     return false;
@@ -427,7 +434,7 @@ abstract class Entity {
                     // handle any endTransaction(), commitSuccess() and/or
                     // rollback() calls.
                     $this->__info['create'] = true;
-                    return $this->commit();
+                    return $this->commit($invalidate,true);
                 }
 
                 // Otherwise we must assume the entity exists but the update had
