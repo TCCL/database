@@ -1,4 +1,4 @@
-database - v1.6.0
+database - v1.6.1
 --------------------------------------------------------------------------------
 This library provides a really simple PDO database connection wrapper in
 addition to providing several database abstraction mechanisms for representing
