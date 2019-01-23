@@ -461,13 +461,15 @@ abstract class Entity {
             return false;
         }
 
-        // Handle insert ID updates. We do this conventionally for keys and
-        // fields with the name 'id'.
-        if (array_key_exists('id',$this->__info['keys']) && is_null($this->__info['keys']['id'])) {
-            $this->__info['keys']['id'] = $this->__info['conn']->lastInsertId();
-        }
-        if (array_key_exists('id',$this->__info['fields'])) {
-            $this->applyFields(['id' => $this->__info['conn']->lastInsertId()],true);
+        // Handle ID key field updates (on INSERT only). We do this
+        // conventionally for keys and fields with the name 'id'.
+        if ($this->__info['create']) {
+            if (array_key_exists('id',$this->__info['keys']) && is_null($this->__info['keys']['id'])) {
+                $this->__info['keys']['id'] = $this->__info['conn']->lastInsertId();
+            }
+            if (array_key_exists('id',$this->__info['fields'])) {
+                $this->applyFields(['id' => $this->__info['conn']->lastInsertId()],true);
+            }
         }
 
         // Call success function to change state *before* post-commit.
