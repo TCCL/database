@@ -42,8 +42,11 @@ trait ReflectionEntityTrait {
 
         foreach ($this->__reverseProps as $field => $prop) {
             $dirty = (string)$this->$prop;
-            if (!isset($this->__clean) && isset($this->$prop)
-                || (string)$this->__clean[$field] != $dirty) {
+            if ((!isset($this->__clean) && isset($this->$prop))
+                || (isset($this->__clean)
+                    && array_key_exists($field,$this->__clean)
+                    && (string)$this->__clean[$field] != $dirty))
+            {
                 $fields[] = $field;
                 $values[] = $dirty;
             }
