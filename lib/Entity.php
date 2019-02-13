@@ -482,7 +482,6 @@ abstract class Entity {
         }
 
         $this->__info['conn']->endTransaction();
-        $this->syncDirtyFields();
         unset($this->__info['updates']);
 
         return true;
@@ -647,6 +646,10 @@ abstract class Entity {
         return $this->__info['keys'];
     }
 
+    final protected function &queryUpdates() {
+        return $this->__info['updates'];
+    }
+
     /**
      * Gets the string representing the WHERE key bind condition in the SQL
      * query. This is just a convenience wrapper.
@@ -750,14 +753,6 @@ abstract class Entity {
                 $this->__info['updates'][$key] = true;
             }
         }
-    }
-
-    /**
-     * Clears the entity's update state.
-     */
-    protected function syncDirtyFields() {
-        // Nothing to do in this implementation since dirty fields are stored on
-        // top of original field values.
     }
 
     /**

@@ -11,13 +11,6 @@ trait ReflectionEntityTrait {
     private $__reverseProps;
 
     /**
-     * Stores the clean field values.
-     *
-     * @var array
-     */
-    private $__clean;
-
-    /**
      * Initializes the trait's state.
      */
     protected function initialize(array $entry) {
@@ -39,14 +32,11 @@ trait ReflectionEntityTrait {
     protected function getDirtyFields(&$values) {
         $values = [];
         $fields = [];
+        $updates = $this->queryUpdates();
 
         foreach ($this->__reverseProps as $field => $prop) {
-            $dirty = (string)$this->$prop;
-            if ((!isset($this->__clean) && isset($this->$prop))
-                || (isset($this->__clean)
-                    && array_key_exists($field,$this->__clean)
-                    && (string)$this->__clean[$field] != $dirty))
-            {
+            $dirty = is_null($this->$prop) ? null : (string)$this->$prop;
+            if (isset($updates[$field])) {
                 $fields[] = $field;
                 $values[] = $dirty;
             }
@@ -77,29 +67,14 @@ trait ReflectionEntityTrait {
      * Overrides Entity::applyFields().
      */
     protected function applyFields($fields,$synchronized = true) {
-        // Update clean state if values are synchronized. We always write to the
-        // dirty state since each application should be reflected in the
-        // object's properties.
-
-        if ($synchronized) {
-            foreach ($fields as $field => $value) {
-                $this->__clean[$field] = $value;
-            }
-        }
-
+        $updates =& $this->queryUpdates();
         foreach ($fields as $field => $value) {
             $prop = $this->__reverseProps[$field];
             $this->$prop = $value;
-        }
-    }
 
-    /**
-     * Overrides Entity::syncDirtyFields().
-     */
-    protected function syncDirtyFields() {
-        // Apply dirty properties to the clean set.
-        foreach ($this->__reverseProps as $field => $prop) {
-            $this->__clean[$field] = $this->$prop;
+            if (!$synchronized) {
+                $updates[$field] = true;
+            }
         }
     }
 }
