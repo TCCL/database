@@ -35,10 +35,9 @@ trait ReflectionEntityTrait {
         $updates = $this->queryUpdates();
 
         foreach ($this->__reverseProps as $field => $prop) {
-            $dirty = is_null($this->$prop) ? null : (string)$this->$prop;
             if (isset($updates[$field])) {
                 $fields[] = $field;
-                $values[] = $dirty;
+                $values[] = $this->$prop;
             }
         }
 
