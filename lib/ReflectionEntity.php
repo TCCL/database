@@ -112,7 +112,7 @@ abstract class ReflectionEntity extends Entity {
                     $parts[1] = null;
                 }
 
-                $results[substr($parts[0],1)] = $parts[1];
+                $results[trim(substr($parts[0],1))] = trim($parts[1]);
             }
         }
 
