@@ -112,7 +112,17 @@ abstract class ReflectionEntity extends Entity {
                     $parts[1] = null;
                 }
 
-                $results[trim(substr($parts[0],1))] = trim($parts[1]);
+                $value = trim($parts[1]);
+
+                if (preg_match('/\[\]$/',$parts[0])) {
+                    $key = trim(substr($parts[0],1,strlen($parts[0])-3));
+                    $results[$key][] = $value;
+                }
+                else {
+                    $key = trim(substr($parts[0],1));
+                    $results[$key] = $value;
+                }
+
             }
         }
 
