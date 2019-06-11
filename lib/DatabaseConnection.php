@@ -95,43 +95,38 @@ class DatabaseConnection {
         if (is_array($args)) {
             // If the 'args' argument is an array, then use its contents as
             // parameters to the prepared statement.
-            $result = $this->pdo()->prepare($query);
-            if ($result !== false) {
-                if ($result->execute($args) === false) {
-                    $error = $result->errorInfo();
+            $stmt = $this->pdo()->prepare($query);
+            if ($stmt !== false) {
+                if ($stmt->execute($args) === false) {
+                    throw new DatabaseException($stmt);
                 }
             }
             else {
-                $error = $this->pdo()->errorInfo();
+                throw new DatabaseException($this->pdo());
             }
         }
         else if (!is_null($args)) {
             // Treat arguments after the query string as parameters to the
             // prepared statement.
             $args = array_slice(func_get_args(),1);
-            $result = $this->pdo()->prepare($query);
-            if ($result !== false) {
-                if ($result->execute($args) === false) {
-                    $error = $result->errorInfo();
+            $stmt = $this->pdo()->prepare($query);
+            if ($stmt !== false) {
+                if ($stmt->execute($args) === false) {
+                    throw new DatabaseException($stmt);
                 }
             }
             else {
-                $error = $this->pdo()->errorInfo();
+                throw new DatabaseException($this->pdo());
             }
         }
         else {
-            $result = $this->pdo()->query($query);
-            if ($result === false) {
-                $error = $this->pdo()->errorInfo();
+            $stmt = $this->pdo()->query($query);
+            if ($stmt === false) {
+                throw new DatabaseException($this->pdo());
             }
         }
 
-        if (isset($error)) {
-            $message = is_null($error[2]) ? '' : ": {$error[2]}";
-            throw new Exception(__METHOD__.": failed database query$message",$error[1]);
-        }
-
-        return $result;
+        return $stmt;
     }
 
     /**
@@ -145,9 +140,7 @@ class DatabaseConnection {
     public function rawQuery($query) {
         $stmt = $this->pdo()->query($query);
         if ($stmt === false) {
-            $error = $this->pdo()->errorInfo();
-            $message = is_null($error[2]) ? '' : ": {$error[2]}";
-            throw new Exception(__METHOD__.": failed database query$message",$error[1]);            
+            throw new DatabaseException($this->pdo());
         }
 
         return $stmt;

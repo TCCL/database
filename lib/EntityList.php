@@ -293,32 +293,30 @@ abstract class EntityList {
                 // leave it NULL if unspecified; the database system may use an
                 // auto ID when we provide NULL.
                 if (isset($entry->$key)) {
-                    $stmt->bindParam(1,$entry->$key);
+                    $stmt->bindValue(1,$entry->$key);
                 }
                 else {
-                    $stmt->bindParam(1,null);
+                    $stmt->bindValue(1,null);
                 }
 
                 $n = 2;
                 foreach ($fields as $fld => $alias) {
                     if (isset($entry->$fld)) {
-                        $stmt->bindParam($n,$entry->$fld);
+                        $stmt->bindValue($n,$entry->$fld);
                     }
                     else if (isset($entry->$alias)) {
-                        $stmt->bindParam($n,$entry->$fld);
+                        $stmt->bindValue($n,$entry->$fld);
                     }
                     else {
                         // Assume default.
-                        $stmt->bindParam($n,null);
+                        $stmt->bindValue($n,null);
                     }
 
                     $n += 1;
                 }
 
                 if ($stmt->execute() === false) {
-                    $error = $stmt->errorInfo();
-                    $message = is_null($error[2]) ? '' : ": {$error[2]}";
-                    throw new Exception(__METHOD__.": failed database query$message",$error[1]);
+                    throw new DatabaseException($stmt);
                 }
 
                 // Assume a last insert ID is the key value for the new entry.
