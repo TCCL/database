@@ -198,13 +198,20 @@ class DatabaseConnection {
      * Wraps PDO::commit() in such a way that transactions are counted and may
      * be nested.
      */
-    public function endTransaction() {
+    public function commit() {
         if (--self::$transactionCounters[$this->key] == 0) {
             $this->pdo()->commit();
         }
         if (self::$transactionCounters[$this->key] < 0) {
             self::$transactionCounters[$this->key] = 0;
         }
+    }
+
+    /**
+     * Alias for commit() method.
+     */
+    public function endTransaction() {
+        $this->commit();
     }
 
     /**
