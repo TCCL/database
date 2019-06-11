@@ -9,6 +9,7 @@
 namespace TCCL\Database;
 
 use PDO;
+use stdClass;
 use Exception;
 use ReflectionClass;
 
@@ -25,6 +26,7 @@ abstract class EntityList {
         'fields' => [],
         'fieldMaps' => [],
         'filters' => [],
+        'filterVars' => [],
 
         'list' => false,
         'changes' => [
@@ -52,12 +54,15 @@ abstract class EntityList {
      *   - map: optional PHP string callable to apply when reading value
      * @param array $filters
      *  Array of SQL fragments used to filter the list.
+     * @param array $filterVars
+     *  Array of variables to bind the filter statement(s).
      */
     public function __construct(DatabaseConnection $conn,
                                 $table = '',
                                 $key = '',
                                 $fields = [],
-                                $filters = [])
+                                $filters = [],
+                                $filterVars = [])
     {
         $rf = new ReflectionClass(get_class($this));
         $commentTags = self::parseDocTags($rf->getDocComment());
@@ -122,10 +127,15 @@ abstract class EntityList {
         if (isset($commentTags['filter'])) {
             $this->__info['filters'] = array_merge($this->__info['filters'],$commentTags['filter']);
         }
+
+        $this->__info['filterVars'] = $filterVars;
     }
 
     /**
      * Obtains an ordered list of all items in the set.
+     *
+     * @param bool $forceReload
+     *  Forces the list to be reloaded from the database (default off).
      *
      * @return array
      *  Returns an indexed array of entity payload arrays. Each inner array will
@@ -148,11 +158,14 @@ abstract class EntityList {
     /**
      * Obtains a list of all items in the set keyed by key field.
      *
+     * @param bool $forceReload
+     *  Forces the list to be reloaded from the database (default off).
+     *
      * @return array
      *  Returns an associative array of entity payload arrays. Each inner array
      *  will have entries for each field, plus one for the key field.
      */
-    public function getItemsWithKeys() {
+    public function getItemsWithKeys($forceReload = false) {
         if ($forceReload) {
             $list = $this->queryList(true);
         }
@@ -166,23 +179,231 @@ abstract class EntityList {
         return $list;
     }
 
-    public function setItem(array $payload) {
+    /**
+     * Adds a new item to the list. The item is automatically assigned a key via
+     * the database system (if defined); otherwise the key must be provided in
+     * the field payload.
+     *
+     * @param array $payload
+     *  The field payload for the item. You must specify all non-default fields.
+     *
+     * @return stdClass
+     *  Returns a tracking object that will be assigned the object's key if it
+     *  is auto-assigned.
+     */
+    public function addItem(array $payload) {
+        $tracking = (object)$payload;
+        if (!array_key_exists($this->__info['key'],$payload)) {
+            $tracking->{$this->__info['key']} = null;
+        }
 
+        $this->__info['changes']['new'][] = $tracking;
+
+        return $tracking;
     }
 
-    public function setItemWithKey($key,array $payload) {
+    /**
+     * Adds a new item to the list with a key.
+     *
+     * @param mixed $key
+     *  The key to use for the new entry.
+     * @param array $payload
+     *  Field payload for the new entry; this must specify all non-default
+     *  fields.
+     * @param bool $override
+     *  If true, then the operation determines if the entry should be inserted
+     *  or updated. Otherwise the operation just assumes the entry is to be
+     *  inserted.
+     *
+     * @return stdClass
+     *  Returns a tracking object.
+     */
+    public function addItemWithKey($key,array $payload,$override = false) {
+        $tracking = (object)$payload;
+        $tracking->{$this->__info['key']} = $key;
 
+        if ($override) {
+            $list = $this->getItemsWithKeys();
+
+            if (isset($list[$key])) {
+                $this->__info['changes']['update'][$key] = $tracking;
+            }
+            else {
+                $this->__info['changes']['new'][] = $tracking;
+            }
+        }
+        else {
+            $this->__info['changes']['new'][] = $tracking;
+        }
+
+        return $tracking;
     }
 
+    /**
+     * Updates an existing item in the list. This assumes the item actually
+     * exists.
+     *
+     * @param mixed $key
+     *  The key that identifies the item to update.
+     * @param array $payload
+     *  List of fields to update; this can be a subset of the total fields.
+     *
+     * @return stdClass
+     *  Returns a tracking object.
+     */
+    public function updateItem($key,array $payload) {
+        $tracking = (object)$payload;
+        $tracking->{$this->__info['key']} = $key;
+
+        $this->__info['changes']['update'][$key] = $tracking;
+
+        return $tracking;
+    }
+
+    /**
+     * Removes an item from the list.
+     *
+     * @param mixed $key
+     *  The key that identifies the item.
+     */
     public function deleteItem($key) {
-
+        $this->__info['changes']['delete'][$key] = true;
     }
 
     /**
      * Commits entity list changes to the database.
      */
     public function commit() {
+        extract($this->__info);
 
+        // Perform everything under a common transaction.
+        $conn->beginTransaction();
+
+        // Insert new entities into the database system. Perform each insert
+        // using a single-insert prepared statement; this allows us to reliably
+        // obtain any auto IDs.
+        if (count($changes['new']) > 0) {
+            $fieldList = $this->makeFieldList(false,true);
+            $preps = '?' . str_repeat(',?',count($fields));
+            $query = "INSERT INTO `$table` ($fieldList) VALUES ($preps)";
+            $stmt = $conn->prepare($query);
+
+            foreach ($changes['new'] as $entry) {
+                // NOTE: The key is always ordered first so we add it here. We
+                // leave it NULL if unspecified; the database system may use an
+                // auto ID when we provide NULL.
+                if (isset($entry->$key)) {
+                    $stmt->bindParam(1,$entry->$key);
+                }
+                else {
+                    $stmt->bindParam(1,null);
+                }
+
+                $n = 2;
+                foreach ($fields as $fld => $alias) {
+                    if (isset($entry->$fld)) {
+                        $stmt->bindParam($n,$entry->$fld);
+                    }
+                    else if (isset($entry->$alias)) {
+                        $stmt->bindParam($n,$entry->$fld);
+                    }
+                    else {
+                        // Assume default.
+                        $stmt->bindParam($n,null);
+                    }
+
+                    $n += 1;
+                }
+
+                if ($stmt->execute() === false) {
+                    $error = $stmt->errorInfo();
+                    $message = is_null($error[2]) ? '' : ": {$error[2]}";
+                    throw new Exception(__METHOD__.": failed database query$message",$error[1]);
+                }
+
+                // Assume a last insert ID is the key value for the new entry.
+                $lastId = $conn->lastInsertId();
+                if (!empty($lastId)) {
+                    if (is_numeric($lastId)) {
+                        $entry->$key = (int)$lastId;
+                    }
+                    else {
+                        $entry->$key = $lastId;
+                    }
+                }
+            }
+        }
+
+        // Update entities that already exist in the database system.
+        if (count($changes['update']) > 0) {
+            $sets = [];
+            $vars = [];
+            $keys = [];
+
+            $usedFields = [];
+
+            $keyNo = 1;
+            foreach ($changes['update'] as $itemKey => $item) {
+                $keyParam = "key$keyNo";
+                $keyNo += 1;
+
+                $vars[$keyParam] = $itemKey;
+                $keys[] = ":$keyParam";
+
+                foreach ($fields as $fld => $alias) {
+                    if (isset($item->$fld)) {
+                        $value = ":$keyParam$fld";
+                        $vars["$keyParam$fld"] = $item->$fld;
+
+                        $usedFields[$fld] = true;
+                    }
+                    else if (isset($item->$alias)) {
+                        $value = ":$keyParam$fld";
+                        $vars["$keyParam$fld"] = $item->$alias;
+
+                        $usedFields[$fld] = true;
+                    }
+                    else {
+                        $value = "`$fld`";
+                    }
+
+                    $sets[$fld][] = "WHEN `$key` = :$keyParam THEN $value";
+                }
+            }
+
+            // Eliminate fields that are never updated across all items.
+            foreach (array_keys($sets) as $fld) {
+                if (!isset($usedFields[$fld])) {
+                    unset($sets[$fld]);
+                }
+            }
+
+            $sets = array_map(function($whens,$fld) {
+                $whens = implode(' ',$whens);
+                return "`$fld` = CASE $whens ELSE `$fld` END";
+
+            }, array_values($sets), array_keys($sets));
+
+            $sets = implode(',',$sets);
+            $preps = implode(',',$keys);
+            $query = "UPDATE `$table` SET $sets WHERE `$key` IN ($preps)";
+
+            $conn->query($query,$vars);
+        }
+
+        // Delete entities.
+        if (count($changes['delete']) > 0) {
+            $keys = array_keys($changes['delete']);
+            $preps = '?' . str_repeat(',?',count($keys)-1);
+            $query = "DELETE FROM `$table` WHERE `$key` IN ($preps)";
+            $conn->query($query,$keys);
+        }
+
+        $conn->commit();
+    }
+
+    protected function setFilterVariables(array $vars) {
+        $this->__info['filterVars'] = $vars;
     }
 
     private function queryList($assoc = false) {
@@ -199,7 +420,7 @@ abstract class EntityList {
             $query .= "WHERE $filterString";
         }
 
-        $stmt = $this->__info['conn']->query($query);
+        $stmt = $this->__info['conn']->query($query,$this->__info['filterVars']);
 
         $rows = [];
         while (true) {
