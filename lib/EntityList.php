@@ -180,6 +180,48 @@ abstract class EntityList {
     }
 
     /**
+     * Applies a complete list to the EntityList. The EntityList will make the
+     * minimal amount of changes required to apply the list. Changes are
+     * detected along the key.
+     *
+     * @param array $items
+     *  The list of items to apply.
+     */
+    public function applyList(array $items) {
+        $tracking = [];
+
+        $key = $this->__info['key'];
+        $curlist = $this->getItemsWithKeys();
+
+        // Ignore any other changes that were previously applied.
+        $this->resetChanges();
+
+        // Calculate array diff to determine set of new and update.
+        $map = [];
+        foreach ($items as $item) {
+            if (!isset($item[$key]) || !isset($curlist[$item[$key]])) {
+                $tracking[] = $this->addItem($item);
+            }
+            else if ($this->comparePayload($item,$curlist[$item[$key]]) != 0) {
+                $tracking[] = $this->updateItem($item[$key],$item);
+            }
+
+            if (isset($item[$key])) {
+                $map[$item[$key]] = $item;
+            }
+        }
+
+        // Calculate reverse array diff to determine set of delete.
+        foreach ($curlist as $kv => $item) {
+            if (!isset($map[$kv])) {
+                $this->deleteItem($kv);
+            }
+        }
+
+        return $tracking;
+    }
+
+    /**
      * Adds a new item to the list. The item is automatically assigned a key via
      * the database system (if defined); otherwise the key must be provided in
      * the field payload.
@@ -304,8 +346,8 @@ abstract class EntityList {
                     if (isset($entry->$fld)) {
                         $stmt->bindValue($n,$entry->$fld);
                     }
-                    else if (isset($entry->$alias)) {
-                        $stmt->bindValue($n,$entry->$fld);
+                    else if ($alias !== false && isset($entry->$alias)) {
+                        $stmt->bindValue($n,$entry->$alias);
                     }
                     else {
                         // Assume default.
@@ -355,7 +397,7 @@ abstract class EntityList {
 
                         $usedFields[$fld] = true;
                     }
-                    else if (isset($item->$alias)) {
+                    else if ($alias !== false && isset($item->$alias)) {
                         $value = ":$keyParam$fld";
                         $vars["$keyParam$fld"] = $item->$alias;
 
@@ -398,6 +440,7 @@ abstract class EntityList {
         }
 
         $conn->commit();
+        $this->resetChanges();
     }
 
     protected function setFilterVariables(array $vars) {
@@ -470,6 +513,48 @@ abstract class EntityList {
                 $value = $this->__info['fieldMaps'][$key]($value);
             }
         }
+    }
+
+    private function resetChanges() {
+        $this->__info['changes'] = [
+            'new' => [],
+            'update' => [],
+            'delete' => [],
+        ];
+    }
+
+    private function comparePayload(array $left,array $right) {
+        // Determine if right differs from left.
+
+        $n = 0;
+
+        foreach ($this->__info['fields'] as $fld => $alias) {
+            if (isset($left[$fld])) {
+                $leftValue = $left[$fld];
+            }
+            else if ($alias !== false && isset($left[$alias])) {
+                $leftValue = $left[$alias];
+            }
+            else {
+                // Note difference if the right side has a field the left side
+                // doesn't have.
+                $n += isset($right[$fld]) || ($alias !== false && isset($right[$alias]));
+            }
+
+            if (isset($right[$fld])) {
+                $rightValue = $right[$fld];
+            }
+            else if ($alias !== false && isset($right[$alias])) {
+                $rightValue = $right[$alias];
+            }
+            else {
+                continue;
+            }
+
+            $n += ($leftValue != $rightValue);
+        }
+
+        return $n;
     }
 
     private static function parseDocTags($block) {
