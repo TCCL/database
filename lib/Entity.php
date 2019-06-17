@@ -317,6 +317,15 @@ abstract class Entity {
     }
 
     /**
+     * Multifield version of touchField().
+     */
+    final public function touchFields(/* $field, ... */) {
+        foreach (func_get_args() as $fieldName) {
+            $this->touchField($fieldName);
+        }
+    }
+
+    /**
      * Commit any pending changes to the database. This must be done explicitly.
      *
      * @param bool $invalidate
