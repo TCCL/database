@@ -21,8 +21,11 @@ abstract class ReflectionEntity extends Entity {
      *
      * @param DatabaseConnection $conn
      *  Database connection to employ.
+     * @param string $table
+     *  An override table name that replaces the default provided in the doc
+     *  comment.
      */
-    public function __construct(DatabaseConnection $conn) {
+    public function __construct(DatabaseConnection $conn,$table = null) {
         $class = get_class($this);
 
         if (!isset(self::$__schemaCache[$class])) {
@@ -30,6 +33,9 @@ abstract class ReflectionEntity extends Entity {
         }
 
         $entry = self::$__schemaCache[$class];
+        if (isset($table)) {
+            $entry['table'] = $table;
+        }
         $keys = $this->initialize($entry);
 
         parent::__construct($conn,$entry['table'],$keys,in_array(null,$keys));
