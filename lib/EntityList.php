@@ -180,6 +180,19 @@ abstract class EntityList {
     }
 
     /**
+     * Sets the initial list as if it were queried from the database.
+     *
+     * @param array $rows
+     *  Result rows to set; they should have the same format expected from a
+     *  database query.
+     */
+    public function setInitialList(array $rows) {
+        array_walk($rows,[$this,'processRow']);
+        $keys = array_column($rows,$this->__info['key']);
+        $this->__info['list'] = array_combine($keys,$rows);
+    }
+
+    /**
      * Applies a complete list to the EntityList. The EntityList will make the
      * minimal amount of changes required to apply the list. Changes are
      * detected along the key.
