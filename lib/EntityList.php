@@ -446,10 +446,16 @@ abstract class EntityList {
 
         // Delete entities.
         if (count($changes['delete']) > 0) {
-            $keys = array_keys($changes['delete']);
-            $preps = '?' . str_repeat(',?',count($keys)-1);
-            $query = "DELETE FROM `$table` WHERE `$key` IN ($preps)";
-            $conn->query($query,$keys);
+            // Invoke delete hook.
+            $this->deleteHook($changes['delete'],$conn,$table);
+
+            // Delete entities from RDBMS.
+            if (count($changes['delete']) > 0) {
+                $keys = array_keys($changes['delete']);
+                $preps = '?' . str_repeat(',?',count($keys)-1);
+                $query = "DELETE FROM `$table` WHERE `$key` IN ($preps)";
+                $conn->query($query,$keys);
+            }
         }
 
         $conn->commit();
@@ -458,6 +464,24 @@ abstract class EntityList {
 
     protected function setFilterVariables(array $vars) {
         $this->__info['filterVars'] = $vars;
+    }
+
+    /**
+     * Hook called by commit() implementation that allows derived functionality
+     * to change the set of items to delete or otherwise process delete items in
+     * some way.
+     *
+     * @param array &$deleteSet
+     *  The set of items to delete; this is an associative array having keys
+     *  corresponding to each entity key in the set. Note that this list is
+     *  always guarenteed to be non-empty.
+     * @param DatabaseConnection $conn
+     *  The database connection associated with the EntityList.
+     * @param string $table
+     *  The table that stores the list entities.
+     */
+    protected function deleteHook(array &$deleteSet,DatabaseConnection $conn,$table) {
+        //  Default implementation does nothing.
     }
 
     private function queryList($assoc = false) {
