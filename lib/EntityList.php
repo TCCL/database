@@ -462,8 +462,37 @@ abstract class EntityList {
         $this->resetChanges();
     }
 
+    /**
+     * Adds a filter to the object's internal list of filters.
+     *
+     * @param string $sql
+     *  The SQL that makes up the filter. Note that all SQL filters are joined
+     *  with AND clauses.
+     */
+    protected function addFilter($sql) {
+        $this->__info['filters'][] = $sql;
+    }
+
+    /**
+     * Sets the filter variables that are substituted for placeholders in the
+     * filter clause (i.e. WHERE clause).
+     *
+     * @param array $vars
+     *  Associative/indexed array of filter variables.
+     */
     protected function setFilterVariables(array $vars) {
         $this->__info['filterVars'] = $vars;
+    }
+
+    /**
+     * Adds a single filter variable to the set of filter variables.
+     *
+     * @param string $name
+     * @param mixed $value
+     *  The variable value needs to be convertable to string.
+     */
+    protected function addFilterVariable($name,$value) {
+        $this->__info['filterVars'][$name] = $value;
     }
 
     /**
