@@ -107,15 +107,20 @@ abstract class EntityList {
             if (!isset($info['name'])) {
                 throw new Exception("EntityList: field entry missing 'name' property");
             }
+            $fieldName = isset($info['alias']) && !empty($info['alias']) ? $info['alias'] : $info['name'];
+
             $this->__info['fields'][$info['name']]
                 = isset($info['alias']) && !empty($info['alias']) ? $info['alias'] : false;
-            $this->__info['fieldMaps'][$info['name']] = isset($info['map']) ? $info['map'] : null;
+
+            $this->__info['fieldMaps'][$fieldName] = isset($info['map']) ? $info['map'] : null;
         }
         if (isset($commentTags['field'])) {
             foreach ($commentTags['field'] as $fld) {
                 @list($name,$alias,$map) = explode(':',$fld,3);
+                $fieldName = !empty($alias) ? $alias : $name;
+
                 $this->__info['fields'][$name] = !empty($alias) ? $alias : false;
-                $this->__info['fieldMaps'][$name] = $map;
+                $this->__info['fieldMaps'][$fieldName] = $map;
             }
         }
 
@@ -643,7 +648,6 @@ abstract class EntityList {
                     $key = trim(substr($parts[0],1));
                     $results[$key] = $value;
                 }
-
             }
         }
 
