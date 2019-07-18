@@ -339,6 +339,14 @@ abstract class EntityList {
         // Perform everything under a common transaction.
         $conn->beginTransaction();
 
+        // Create filter fragment. We'll use this for the UPDATE and DELETE
+        // queries so that only filtered entities are touched for those
+        // operations.
+        $filters = $this->makeFilterString();
+        if (!empty($filters)) {
+            $filters = "AND $filters";
+        }
+
         // Insert new entities into the database system. Perform each insert
         // using a single-insert prepared statement; this allows us to reliably
         // obtain any auto IDs.
@@ -444,8 +452,9 @@ abstract class EntityList {
 
             $sets = implode(',',$sets);
             $preps = implode(',',$keys);
-            $query = "UPDATE `$table` SET $sets WHERE `$key` IN ($preps)";
+            $query = "UPDATE `$table` SET $sets WHERE `$key` IN ($preps) $filters";
 
+            $vars = array_merge($vars,$this->__info['filterVars']);
             $conn->query($query,$vars);
         }
 
@@ -458,8 +467,9 @@ abstract class EntityList {
             if (count($changes['delete']) > 0) {
                 $keys = array_keys($changes['delete']);
                 $preps = '?' . str_repeat(',?',count($keys)-1);
-                $query = "DELETE FROM `$table` WHERE `$key` IN ($preps)";
-                $conn->query($query,$keys);
+                $query = "DELETE FROM `$table` WHERE `$key` IN ($preps) $filters";
+                $vars = array_merge($keys,$this->__info['filterVars']);
+                $conn->query($query,$vars);
             }
         }
 
@@ -522,13 +532,8 @@ abstract class EntityList {
         $query = 'SELECT ' . $this->makeFieldList(true,true)
                . " FROM {$this->__info['table']} ";
 
-        if (!empty($this->__info['filters'])) {
-            $filters = array_map(function($filter) {
-                return "($filter)";
-
-            }, $this->__info['filters']);
-
-            $filterString = implode(' AND ',$filters);
+        $filterString = $this->makeFilterString();
+        if (!empty($filterString)) {
             $query .= "WHERE $filterString";
         }
 
@@ -570,6 +575,20 @@ abstract class EntityList {
         }, $fields);
 
         return implode(', ',$fields);
+    }
+
+    private function makeFilterString() {
+        if (!empty($this->__info['filters'])) {
+            $filters = array_map(function($filter) {
+                return "($filter)";
+
+            }, $this->__info['filters']);
+
+            $filterString = implode(' AND ',$filters);
+            return $filterString;
+        }
+
+        return '';
     }
 
     private function processRow(array &$row) {
