@@ -554,6 +554,28 @@ abstract class Entity {
     }
 
     /**
+     * Gets dirty fields but only for insert.
+     *
+     * @param array &$values
+     *  Appends the values to insert to the specified array.
+     *
+     * @return array
+     *  Returns the list of insert fields as an associative array.
+     */
+    final public function getInserts(array &$values) {
+        if (!$this->__info['create']) {
+            return false;
+        }
+
+        $result = $this->getDirtyFields($values);
+        if ($result === false) {
+            return false;
+        }
+
+        return array_fill_keys($result,true);
+    }
+
+    /**
      * Creates a new Entity instance. This must be called by derived classes in
      * order for the object to function properly.
      *
