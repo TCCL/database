@@ -376,7 +376,7 @@ abstract class EntityList {
                         $stmt->bindValue($n,$entry->$alias);
                     }
                     else {
-                        // Assume default.
+                        // Assume default value or NULL provided.
                         $stmt->bindValue($n,null);
                     }
 
@@ -417,13 +417,13 @@ abstract class EntityList {
                 $keys[] = ":$keyParam";
 
                 foreach ($fields as $fld => $alias) {
-                    if (isset($item->$fld)) {
+                    if (property_exists($item,$fld)) {
                         $value = ":$keyParam$fld";
                         $vars["$keyParam$fld"] = $item->$fld;
 
                         $usedFields[$fld] = true;
                     }
-                    else if ($alias !== false && isset($item->$alias)) {
+                    else if ($alias !== false && property_exists($item,$alias)) {
                         $value = ":$keyParam$fld";
                         $vars["$keyParam$fld"] = $item->$alias;
 
