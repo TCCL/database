@@ -155,7 +155,12 @@ class DatabaseConnection {
      * @return PDOStatement
      */
     public function prepare($query) {
-        return $this->pdo()->prepare($query);
+        $stmt = $this->pdo()->prepare($query);
+        if ($stmt === false) {
+            throw new DatabaseException($this->pdo());
+        }
+
+        return $stmt;
     }
 
     /**
