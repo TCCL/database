@@ -28,34 +28,15 @@ abstract class ReflectionEntity extends Entity {
     public function __construct(DatabaseConnection $conn,$table = null) {
         // Load schema from class metadata.
         $class = get_class($this);
-        while (true) {
-            if (isset(self::$__schemaCache[$class])) {
-                $schema = self::$__schemaCache[$class];
-                break;
-            }
-            $schema = self::loadSchema($class);
-            if ($schema !== false) {
-                self::$__schemaCache[$class] = $schema;
-                break;
-            }
-            $schema = false;
+        $schema = self::loadSchema($class);
 
-            $parent = get_parent_class($class);
-            if ($parent === false || $parent == 'TCCL\Database\ReflectionEntity') {
-                break;
-            }
-
-            $class = $parent;
-        }
-
-        if (!isset($schema)) {
+        if ($schema === false) {
             trigger_error(
-                'ReflectionEntity: Subclass is missing required schema doc comment definitions',
+                "ReflectionEntity: Schema metadata could not be loaded for class '$class' or any parent class",
                 E_USER_ERROR
             );
         }
 
-        $schema = self::$__schemaCache[$class];
         if (isset($table)) {
             $schema['table'] = $table;
         }
@@ -83,11 +64,23 @@ abstract class ReflectionEntity extends Entity {
     }
 
     private static function loadSchema($className) {
+        // Handle base cases (this function is called recursively).
+        if (!$className || $className == 'TCCL\Database\ReflectionEntity') {
+            return false;
+        }
+
+        // Hit cache.
+        if (isset(self::$__schemaCache[$className])) {
+            return self::$__schemaCache[$className];
+        }
+
+        // Load schema from metadata using doc-comment reflection.
+
         $rf = new ReflectionClass($className);
         $topLevelTags = self::parseDocTags($rf->getDocComment());
 
         if (!isset($topLevelTags['table'])) {
-            return false;
+            return self::loadSchema(get_parent_class($className));
         }
 
         $props = [];
@@ -122,13 +115,16 @@ abstract class ReflectionEntity extends Entity {
             }
         }
 
-        return [
+        $schema = [
             'table' => $topLevelTags['table'],
             'fields' => $fields,
             'props' => $props,
             'filters' => $filters,
             'keys' => $keys,
         ];
+        self::$__schemaCache[$className] = $schema;
+
+        return $schema;
     }
 
     private static function parseDocTags($block) {
