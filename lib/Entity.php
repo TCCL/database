@@ -3,7 +3,7 @@
 /**
  * Entity.php
  *
- * This file is a part of tccl/database.
+ * tccl/database
  */
 
 namespace TCCL\Database;

@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * ReflectionEntityTrait.php
+ *
+ * tccl/database
+ */
+
 namespace TCCL\Database;
 
 trait ReflectionEntityTrait {
