@@ -26,20 +26,43 @@ abstract class ReflectionEntity extends Entity {
      *  comment.
      */
     public function __construct(DatabaseConnection $conn,$table = null) {
+        // Load schema from class metadata.
         $class = get_class($this);
+        while (true) {
+            if (isset(self::$__schemaCache[$class])) {
+                $schema = self::$__schemaCache[$class];
+                break;
+            }
+            $schema = self::loadSchema($class);
+            if ($schema !== false) {
+                self::$__schemaCache[$class] = $schema;
+                break;
+            }
+            $schema = false;
 
-        if (!isset(self::$__schemaCache[$class])) {
-            self::$__schemaCache[$class] = self::loadSchema($class);
+            $parent = get_parent_class($class);
+            if ($parent === false || $parent == 'TCCL\Database\ReflectionEntity') {
+                break;
+            }
+
+            $class = $parent;
         }
 
-        $entry = self::$__schemaCache[$class];
+        if (!isset($schema)) {
+            trigger_error(
+                'ReflectionEntity: Subclass is missing required schema doc comment definitions',
+                E_USER_ERROR
+            );
+        }
+
+        $schema = self::$__schemaCache[$class];
         if (isset($table)) {
-            $entry['table'] = $table;
+            $schema['table'] = $table;
         }
-        $keys = $this->initialize($entry);
+        $keys = $this->initialize($schema);
 
-        parent::__construct($conn,$entry['table'],$keys,in_array(null,$keys));
-        $this->setFieldInfo($entry['fields'],$entry['props'],$entry['filters']);
+        parent::__construct($conn,$schema['table'],$keys,in_array(null,$keys));
+        $this->setFieldInfo($schema['fields'],$schema['props'],$schema['filters']);
     }
 
     /**
@@ -64,7 +87,7 @@ abstract class ReflectionEntity extends Entity {
         $topLevelTags = self::parseDocTags($rf->getDocComment());
 
         if (!isset($topLevelTags['table'])) {
-            trigger_error('Class doc comment is missing table definition',E_USER_ERROR);
+            return false;
         }
 
         $props = [];
