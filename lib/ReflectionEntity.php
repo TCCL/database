@@ -78,11 +78,25 @@ abstract class ReflectionEntity extends Entity {
 
         $rf = new ReflectionClass($className);
         $topLevelTags = self::parseDocTags($rf->getDocComment());
+        $fields = self::loadSchemaFields($rf);
 
         if (!isset($topLevelTags['table'])) {
-            return self::loadSchema(get_parent_class($className));
+            return self::mergeSchema(
+                $fields,
+                self::loadSchema(get_parent_class($className))
+            );
         }
 
+        $schema = self::mergeSchema(
+            ['table' => $topLevelTags['table']] + $fields,
+            self::loadSchema(get_parent_class($className))
+        );
+        self::$__schemaCache[$className] = $schema;
+
+        return $schema;
+    }
+
+    private static function loadSchemaFields(ReflectionClass $rf) {
         $props = [];
         $fields = [];
         $filters = [];
@@ -115,14 +129,33 @@ abstract class ReflectionEntity extends Entity {
             }
         }
 
-        $schema = [
-            'table' => $topLevelTags['table'],
+        return [
             'fields' => $fields,
             'props' => $props,
             'filters' => $filters,
             'keys' => $keys,
         ];
-        self::$__schemaCache[$className] = $schema;
+    }
+
+    private static function mergeSchema(array $schema,$with) {
+        if (!is_array($with)) {
+            if (!isset($schema['table'])) {
+                return false;
+            }
+
+            return $schema;
+        }
+
+        // Merge table.
+        if (!isset($schema['table'])) {
+            $schema['table'] = $with['table'];
+        }
+
+        // Merge field metadata.
+        $schema['fields'] += $with['fields'];
+        $schema['props'] += $with['props'];
+        $schema['filters'] += $with['filters'];
+        $schema['keys'] += $with['keys'];
 
         return $schema;
     }

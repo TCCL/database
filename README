@@ -380,6 +380,11 @@ class Fruit extends ReflectionEntity {
     }
 }
 
+You can inherit ReflectionEntity types. The ReflectionEntity will inherit
+schema. If schema are specified in both parent and child classes, then the
+functionality will merge. The most-derived class has precedence when it comes to
+table names, fields, ETC.
+
 [Schema]
 
 This class provides a way to manage schemas programmatically. Currently, the
