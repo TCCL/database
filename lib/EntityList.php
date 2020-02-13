@@ -402,60 +402,54 @@ abstract class EntityList {
 
         // Update entities that already exist in the database system.
         if (count($changes['update']) > 0) {
-            $sets = [];
             $vars = [];
-            $keys = [];
+            $stmts = [];
+            $assign = [];
 
-            $usedFields = [];
-
-            $keyNo = 1;
+            // Create statements and assignments used to update entities.
             foreach ($changes['update'] as $itemKey => $item) {
-                $keyParam = "key$keyNo";
-                $keyNo += 1;
-
-                $vars[$keyParam] = $itemKey;
-                $keys[] = ":$keyParam";
+                $sets = [];
 
                 foreach ($fields as $fld => $alias) {
                     if (property_exists($item,$fld)) {
-                        $value = ":$keyParam$fld";
-                        $vars["$keyParam$fld"] = $item->$fld;
-
-                        $usedFields[$fld] = true;
+                        $vars[$itemKey][] = $item->$fld;
+                        $sets[] = "`$fld` = ?";
                     }
                     else if ($alias !== false && property_exists($item,$alias)) {
-                        $value = ":$keyParam$fld";
-                        $vars["$keyParam$fld"] = $item->$alias;
-
-                        $usedFields[$fld] = true;
+                        $vars[$itemKey] = $item->$alias;
+                        $sets[] = "`$fld` = ?";
                     }
-                    else {
-                        $value = "`$fld`";
-                    }
-
-                    $sets[$fld][] = "WHEN `$key` = :$keyParam THEN $value";
                 }
+
+                if (empty($sets)) {
+                    continue;
+                }
+
+                $sets = implode(',',$sets);
+                if (!isset($stmts[$sets])) {
+                    $query = "UPDATE `$table` SET $sets WHERE `$key` = ? $filters";
+                    $stmts[$sets] = $conn->prepare($query);
+                }
+                $assign[$itemKey] = $sets;
             }
 
-            // Eliminate fields that are never updated across all items.
-            foreach (array_keys($sets) as $fld) {
-                if (!isset($usedFields[$fld])) {
-                    unset($sets[$fld]);
+            // Execute statements to perform updates for each assignment.
+            foreach ($assign as $itemKey => $stmtKey) {
+                $stmt = $stmts[$stmtKey];
+
+                $n = 1;
+                foreach ($vars[$itemKey] as $value) {
+                    $stmt->bindValue($n++,$value);
+                }
+                $stmt->bindValue($n++,$itemKey);
+                foreach ($filterVars as $value) {
+                    $stmt->bindValue($n++,$value);
+                }
+
+                if ($stmt->execute() === false) {
+                    throw new DatabaseException($stmt);
                 }
             }
-
-            $sets = array_map(function($whens,$fld) {
-                $whens = implode(' ',$whens);
-                return "`$fld` = CASE $whens ELSE `$fld` END";
-
-            }, array_values($sets), array_keys($sets));
-
-            $sets = implode(',',$sets);
-            $preps = implode(',',$keys);
-            $query = "UPDATE `$table` SET $sets WHERE `$key` IN ($preps) $filters";
-
-            $vars = array_merge($vars,$this->__info['filterVars']);
-            $conn->query($query,$vars);
         }
 
         // Delete entities.
