@@ -1,4 +1,4 @@
-database - v1.8.0
+database - v1.8.1
 --------------------------------------------------------------------------------
 This library provides a really simple PDO database connection wrapper in
 addition to providing several database abstraction mechanisms for representing
@@ -325,6 +325,37 @@ Example:
             parent::__construct(Database::getConnection());
         }
     }
+
+An entity list can also contain one or more filters used to narrow the list of
+entities (e.g. using a subkey). Filters are SQL fragments utilized when updating
+or deleting entities in the list. Filters are NOT considered when creating new
+entities: you must make sure to assign appropriate fields. While you can specify
+your filter as a single fragment, you can also specify multiple fragments which
+will be combined in conjunction.
+
+Filter fragments can have bound parameters. These MUST be positional bound
+parameters, indicated via a '?' symbol in the fragment. You can assign bound
+parameters in your constructor using the setFilterVariables() method. Note that
+the set of filter variables span each fragment in order.
+
+Example: consider a list of employees grouped by department:
+
+/**
+ * @table employee
+ * @key id
+ * @field[] name::
+ * @field[] title::
+ * @field[] start_date:startDate:
+ * @filter[] department = ?
+ */
+class EmployeeList extends EntityList {
+  public function __construct($department) {
+    parent::__construct(Database::getSingleton());
+    $this->setFilterVariables([
+      $department,
+    ]);
+  }
+}
 
 [ReflectionEntity]
 
