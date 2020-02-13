@@ -525,10 +525,9 @@ abstract class Entity {
                 // Allow derived functionality the chance to process the fields.
                 $this->processFetchResults($newfields);
 
-                // Update fields with new fetch results.
+                // Update fields with new fetch results. (This sets state to
+                // exists.)
                 $this->setFields($newfields);
-
-                $this->__info['existsState'] = true;
             }
         }
     }
