@@ -450,10 +450,11 @@ abstract class Entity {
                 // no changes.
 
                 // Call success function to change state *before* post-commit.
+                $create = $this->__info['create'];
                 $this->commitSuccess($invalidate);
 
                 // Invoke post commit method.
-                if ($this->postCommit($this->__info['create']) === false) {
+                if ($this->postCommit($create) === false) {
                     $this->rollback();
                     return false;
                 }
@@ -487,10 +488,11 @@ abstract class Entity {
         }
 
         // Call success function to change state *before* post-commit.
+        $create = $this->__info['create'];
         $this->commitSuccess($invalidate);
 
         // Invoke post commit method.
-        if ($this->postCommit($this->__info['create']) === false) {
+        if ($this->postCommit($create) === false) {
             $this->rollback();
             return false;
         }
