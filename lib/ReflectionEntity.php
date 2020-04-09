@@ -17,6 +17,31 @@ abstract class ReflectionEntity extends Entity {
     private static $__schemaCache;
 
     /**
+     * Gets metadata for the ReflectionEntity class.
+     *
+     * @return array
+     *  An associative array having the following fields:
+     *   - table
+     *   - fields
+     *   - props
+     *   - filters
+     *   - keys
+     */
+    public static function getMetadata() {
+        // Load schema from class metadata.
+        $schema = self::loadSchema(static::class);
+
+        if ($schema === false) {
+            trigger_error(
+                "ReflectionEntity: Schema metadata could not be loaded for class '$class' or any parent class",
+                E_USER_ERROR
+            );
+        }
+
+        return $schema;
+    }
+
+    /**
      * Creates a new ReflectionEntity instance.
      *
      * @param DatabaseConnection $conn
@@ -26,16 +51,7 @@ abstract class ReflectionEntity extends Entity {
      *  comment.
      */
     public function __construct(DatabaseConnection $conn,$table = null) {
-        // Load schema from class metadata.
-        $class = get_class($this);
-        $schema = self::loadSchema($class);
-
-        if ($schema === false) {
-            trigger_error(
-                "ReflectionEntity: Schema metadata could not be loaded for class '$class' or any parent class",
-                E_USER_ERROR
-            );
-        }
+        $schema = self::getMetadata();
 
         if (isset($table)) {
             $schema['table'] = $table;
