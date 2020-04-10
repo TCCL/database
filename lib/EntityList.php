@@ -334,6 +334,11 @@ abstract class EntityList {
      * Commits entity list changes to the database.
      */
     public function commit() {
+        $stateChanges = [
+            'add' => [],
+            'update' => [],
+            'delete' => [],
+        ];
         extract($this->__info);
 
         // Perform everything under a common transaction.
@@ -357,29 +362,36 @@ abstract class EntityList {
             $stmt = $conn->prepare($query);
 
             foreach ($changes['new'] as $entry) {
+                $state = [];
+
                 // NOTE: The key is always ordered first so we add it here. We
                 // leave it NULL if unspecified; the database system may use an
                 // auto ID when we provide NULL.
                 if (isset($entry->$key)) {
                     $stmt->bindValue(1,$entry->$key);
+                    $state[$key] = $entry->$key;
+                    $needKey = false;
                 }
                 else {
                     $stmt->bindValue(1,null);
+                    $needKey = true;
                 }
 
                 $n = 2;
                 foreach ($fields as $fld => $alias) {
                     if (isset($entry->$fld)) {
-                        $stmt->bindValue($n,$entry->$fld);
+                        $value = $entry->$fld;
                     }
                     else if ($alias !== false && isset($entry->$alias)) {
-                        $stmt->bindValue($n,$entry->$alias);
+                        $value = $entry->$alias;
                     }
                     else {
                         // Assume default value or NULL provided.
-                        $stmt->bindValue($n,null);
+                        $value = null;
                     }
 
+                    $stmt->bindValue($n,$value);
+                    $state[$alias !== false ? $alias : $fld] = $value;
                     $n += 1;
                 }
 
@@ -387,16 +399,25 @@ abstract class EntityList {
                     throw new DatabaseException($stmt);
                 }
 
-                // Assume a last insert ID is the key value for the new entry.
-                $lastId = $conn->lastInsertId();
-                if (!empty($lastId)) {
-                    if (is_numeric($lastId)) {
-                        $entry->$key = (int)$lastId;
-                    }
-                    else {
-                        $entry->$key = $lastId;
+                // Assume a last insert ID is the key value for the new entry,
+                // but ONLY if we need a key. If the user supplied a key, it may
+                // be an alternate key that does NOT correspond to the auto
+                // insert ID.
+                if ($needKey) {
+                    $lastId = $conn->lastInsertId();
+                    if (!empty($lastId)) {
+                        if (is_numeric($lastId)) {
+                            $entry->$key = (int)$lastId;
+                        }
+                        else {
+                            $entry->$key = $lastId;
+                        }
+
+                        $state[$key] = $entry->$key;
                     }
                 }
+
+                $stateChanges['add'][] = $state;
             }
         }
 
@@ -412,13 +433,18 @@ abstract class EntityList {
 
                 foreach ($fields as $fld => $alias) {
                     if (property_exists($item,$fld)) {
-                        $vars[$itemKey][] = $item->$fld;
-                        $sets[] = "`$fld` = ?";
+                        $value = $item->$fld;
                     }
                     else if ($alias !== false && property_exists($item,$alias)) {
-                        $vars[$itemKey] = $item->$alias;
-                        $sets[] = "`$fld` = ?";
+                        $value = $item->$alias;
                     }
+                    else {
+                        continue;
+                    }
+
+                    $stateChanges['update'][$itemKey][$alias !== false ? $alias : $fld] = $value;
+                    $vars[$itemKey][] = $value;
+                    $sets[] = "`$fld` = ?";
                 }
 
                 if (empty($sets)) {
@@ -464,11 +490,35 @@ abstract class EntityList {
                 $query = "DELETE FROM `$table` WHERE `$key` IN ($preps) $filters";
                 $vars = array_merge($keys,$this->__info['filterVars']);
                 $conn->query($query,$vars);
+
+                $stateChanges['delete'] = $keys;
             }
         }
 
         $conn->commit();
         $this->resetChanges();
+
+        // Process state changes to internal list (if the internal list was
+        // already set).
+        if (is_array($this->__info['list'])) {
+            foreach ($stateChanges['add'] as &$row) {
+                if (isset($row[$key])) {
+                    $this->processRow($row);
+                    $this->__info['list'][$row[$key]] = $row;
+                }
+            }
+            unset($row);
+            foreach ($stateChanges['update'] as $key => &$row) {
+                if (isset($this->__info['list'][$key])) {
+                    $this->processRow($row);
+                    $this->__info['list'][$key] = $row + $this->__info['list'][$key];
+                }
+            }
+            unset($row);
+            foreach ($stateChanges['delete'] as $key) {
+                unset($this->__info['list'][$key]);
+            }
+        }
     }
 
     /**
@@ -586,7 +636,7 @@ abstract class EntityList {
     }
 
     private function processRow(array &$row) {
-        if (is_numeric($row[$this->__info['key']])) {
+        if (isset($row[$this->__info['key']]) && is_numeric($row[$this->__info['key']])) {
             $row[$this->__info['key']] = (int)$row[$this->__info['key']];
         }
 
@@ -597,6 +647,7 @@ abstract class EntityList {
                 $value = $this->__info['fieldMaps'][$key]($value);
             }
         }
+        unset($value);
     }
 
     private function resetChanges() {
