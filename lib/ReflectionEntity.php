@@ -42,6 +42,29 @@ abstract class ReflectionEntity extends Entity {
     }
 
     /**
+     * Normalizes a field name.
+     *
+     * @param string $propOrField
+     *  Property or field name.
+     *
+     * @return string
+     *  Returns false if the value did not normalize to a valid field.
+     */
+    public static function normalizeField($propOrField) {
+        $schema = self::getMetadata();
+
+        if (isset($schema['props'][$propOrField])) {
+            return $schema['props'][$propOrField];
+        }
+
+        if (array_key_exists($propOrField,$schema['fields'])) {
+            return $propOrField;
+        }
+
+        return false;
+    }
+
+    /**
      * Creates a new ReflectionEntity instance.
      *
      * @param DatabaseConnection $conn
