@@ -73,7 +73,9 @@ abstract class ReflectionEntity extends Entity {
      * @param array $filters
      *  Associative array mapping field to filter value. If the value is NULL,
      *  then the field is filtered using the expression IS NULL. If the value is
-     *  TRUE, then the field is filtered using the expression IS NOT NULL.
+     *  TRUE or FALSE, then the field is interpreted as a boolean
+     *  respectively. If the field name is prefixed with '!' then the filter
+     *  expression is negated.
      * @param string $tableAlias
      *  The name alias to use for the table. If none is provided, then actual
      *  table name is used.
@@ -103,6 +105,14 @@ abstract class ReflectionEntity extends Entity {
         $n = 1;
 
         foreach ($filters as $field => $value) {
+            if ($field[0] == '!') {
+                $negate = 'NOT ';
+                $field = substr($field,1);
+            }
+            else {
+                $negate = '';
+            }
+
             if (array_key_exists($field,$schema['props'])) {
                 $ref = "`$tableAlias`.`{$schema['props'][$field]}`";
             }
@@ -117,10 +127,13 @@ abstract class ReflectionEntity extends Entity {
             }
 
             if ($value === true) {
-                $parts[] = "$ref IS NOT NULL";
+                $parts[] = "$negate$ref";
+            }
+            else if ($value === false) {
+                $parts[] = "{$negate}NOT $ref";
             }
             else if (is_null($value)) {
-                $parts[] = "$ref IS NULL";
+                $parts[] = "$ref IS {$negate}NULL";
             }
             else if (is_array($value)) {
                 if (empty($value)) {
@@ -134,11 +147,16 @@ abstract class ReflectionEntity extends Entity {
                     $vars[$vv] = $val;
                 }
                 $preps = implode(',',$preps);
-                $parts[] = "$ref IN ($preps)";
+                $parts[] = "$ref {$negate}IN ($preps)";
             }
             else {
                 $vv = "f{$prefix}_" . $n++;
-                $parts[] = "$ref = :$vv";
+                if ($negate) {
+                    $parts[] = "$ref <> :$vv";
+                }
+                else {
+                    $parts[] = "$ref = :$vv";
+                }
                 $vars[$vv] = $value;
             }
         }
