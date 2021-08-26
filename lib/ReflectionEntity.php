@@ -302,14 +302,19 @@ abstract class ReflectionEntity extends Entity {
      * @param string $table
      *  An override table name that replaces the default provided in the doc
      *  comment.
+     * @param ?array $keys
+     *  Override keys for the Entity instance.
      */
-    public function __construct(DatabaseConnection $conn,$table = null) {
+    public function __construct(DatabaseConnection $conn,$table = null,$keys = null) {
         $schema = self::getMetadata();
 
         if (isset($table)) {
             $schema['table'] = $table;
         }
-        $keys = $this->initialize($schema);
+        $initialKeys = $this->initialize($schema);
+        if (!is_array($keys) || empty($keys)) {
+            $keys = $initialKeys;
+        }
 
         parent::__construct($conn,$schema['table'],$keys,in_array(null,$keys));
         $this->setFieldInfo($schema['fields'],$schema['props'],$schema['filters']);
