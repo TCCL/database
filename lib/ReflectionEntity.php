@@ -65,6 +65,63 @@ abstract class ReflectionEntity extends Entity {
     }
 
     /**
+     * Generates an SQL fragment containing the table name.
+     *
+     * @param string $alias
+     *  An optional alias to apply to the fragment.
+     *
+     * @return string
+     */
+    public static function createTableFragment($alias = '') {
+        $schema = self::getMetadata();
+        $table = $schema['table'];
+
+        if (!empty($alias)) {
+            return "`$table` AS `$alias`";
+        }
+
+        return "`$table`";
+    }
+
+    /**
+     * Generates an SQL fragment containing a list of fields.
+     *
+     * @param array $fields
+     *  The subset of fields to generate. To create a field alias, use a
+     *  non-numeric key that maps to the alias name. If omitted, all fields will
+     *  be generated.
+     * @param ?string $tableAlias
+     *  An alternative name for the table.
+     *
+     * @return string
+     */
+    public static function createFieldsFragment(array $fields = [],$tableAlias = null) {
+        $schema = self::getMetadata();
+
+        if (!empty($fields)) {
+            $fields = $schema['fields'];
+        }
+
+        $table = $tableAlias ?? $schema['table'];
+
+        $fragment = array_map(
+            function($field,$key) use($table) {
+                if (is_numeric($key)) {
+                    return "`$table`.`$field`";
+                }
+
+                return "`$table`.`$key` AS `$field`";
+            },
+            array_values($fields),
+            array_keys($fields)
+        );
+
+        $fragment = implode(',',$fragment);
+
+        return $fragment;
+    }
+
+    /**
      * Creates an SQL fragment for filtering a SELECT query via a WHERE clause. The fragment
      *
      * @param array &$vars
