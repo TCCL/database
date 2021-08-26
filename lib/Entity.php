@@ -23,6 +23,27 @@ use Exception;
  */
 abstract class Entity {
     /**
+     * Helper function to collect values from an array having a common prefix.
+     *
+     * @param string $prefix
+     * @param array $row
+     * @param array $extra
+     *
+     * @return array
+     */
+    public static function collect($prefix,array $row,array $extra = []) {
+        $collection = [];
+
+        foreach ($row as $key => $value) {
+            if (substr($key,0,strlen($prefix)) == $prefix) {
+                $collection[substr($key,strlen($prefix))] = $value;
+            }
+        }
+
+        return $collection + $extra;
+    }
+
+    /**
      * Store all instance state in this bucket to free up property names in
      * derived classes.
      *
@@ -266,13 +287,6 @@ abstract class Entity {
         // Always set the fetchState to true to avoid overwriting the fields.
         $this->__info['fetchState'] = true;
 
-        // If the caller indicated the entity is synchronized, change the create
-        // flag to reflect this.
-        if ($synchronized) {
-            $this->__info['existsState'] = true;
-            $this->__info['create'] = false;
-        }
-
         // Prefer props over field names in case there are duplicates.
         foreach (array_keys($fields) as $name) {
             if (isset($this->__info['props'][$name])
@@ -310,6 +324,17 @@ abstract class Entity {
         }
 
         $this->applyFields($apply,$synchronized);
+
+        // If the caller indicated the entity is synchronized, change the create
+        // flag to reflect this.
+        if ($synchronized) {
+            // The entity exists if there is at least one non-empty key.
+            $this->__info['existsState'] = !empty(
+                array_filter($this->__info['keys'])
+            );
+
+            $this->__info['create'] = false;
+        }
     }
 
     /**
