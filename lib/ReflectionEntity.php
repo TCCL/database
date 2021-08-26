@@ -94,25 +94,35 @@ abstract class ReflectionEntity extends Entity {
      *  be generated.
      * @param ?string $tableAlias
      *  An alternative name for the table.
+     * @param string $fieldPrefix
+     *  Optional field prefix to apply to field aliases.
      *
      * @return string
      */
-    public static function createFieldsFragment(array $fields = [],$tableAlias = null) {
+    public static function createFieldsFragment(
+        array $fields = [],
+        $tableAlias = null,
+        $fieldPrefix = '')
+    {
         $schema = self::getMetadata();
 
-        if (!empty($fields)) {
-            $fields = $schema['fields'];
+        if (empty($fields)) {
+            $fields = array_keys($schema['fields']);
         }
 
         $table = $tableAlias ?? $schema['table'];
 
         $fragment = array_map(
-            function($field,$key) use($table) {
-                if (is_numeric($key)) {
-                    return "`$table`.`$field`";
+            function($field,$key) use($table,$fieldPrefix) {
+                if (!is_numeric($key)) {
+                    $alias = $fieldPrefix . $key;
+                    $field = $key;
+                }
+                else {
+                    $alias = $fieldPrefix . $field;
                 }
 
-                return "`$table`.`$key` AS `$field`";
+                return "`$table`.`$field` AS `$alias`";
             },
             array_values($fields),
             array_keys($fields)
