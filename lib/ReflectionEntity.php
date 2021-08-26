@@ -24,7 +24,9 @@ abstract class ReflectionEntity extends Entity {
      *   - table
      *   - fields
      *   - props
-     *   - filters
+     *   - syncFn
+     *   - filters (deprecated; same as 'syncFn')
+     *   - commitFn
      *   - keys
      */
     public static function getMetadata() {
@@ -317,7 +319,12 @@ abstract class ReflectionEntity extends Entity {
         }
 
         parent::__construct($conn,$schema['table'],$keys,in_array(null,$keys));
-        $this->setFieldInfo($schema['fields'],$schema['props'],$schema['filters']);
+        $this->setFieldInfo(
+            $schema['fields'],
+            $schema['props'],
+            $schema['syncFn'],
+            $schema['commitFn']
+        );
     }
 
     /**
@@ -373,7 +380,8 @@ abstract class ReflectionEntity extends Entity {
     private static function loadSchemaFields(ReflectionClass $rf) {
         $props = [];
         $fields = [];
-        $filters = [];
+        $syncFn = [];
+        $commitFn = [];
         $keys = [];
 
         foreach ($rf->getProperties() as $prop) {
@@ -381,16 +389,18 @@ abstract class ReflectionEntity extends Entity {
 
             if (isset($tags['field'])) {
                 $field = $tags['field'];
+                $fields[$field] = null;
                 $props[$prop->getName()] = $field;
 
                 if (isset($tags['filter']) && is_callable($tags['filter'])) {
-                    $filter = $tags['filter'];
-
-                    $fields[$field] = null;
-                    $filters[$field] = $filter;
+                    $syncFn[$field] = $tags['filter'];
                 }
-                else {
-                    $fields[$field] = null;
+                else if (isset($tags['sync']) && is_callable($tags['sync'])) {
+                    $syncFn[$field] = $tags['sync'];
+                }
+
+                if (isset($tags['commit']) && is_callable($tags['commit'])) {
+                    $commitFn[$field] = $tags['commit'];
                 }
 
                 if (array_key_exists('key',$tags)) {
@@ -402,7 +412,8 @@ abstract class ReflectionEntity extends Entity {
         return [
             'fields' => $fields,
             'props' => $props,
-            'filters' => $filters,
+            'syncFn' => $syncFn,
+            'commitFn' => $commitFn,
             'keys' => $keys,
         ];
     }

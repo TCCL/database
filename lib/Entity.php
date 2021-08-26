@@ -32,7 +32,7 @@ abstract class Entity {
         /**
          * The database connection.
          *
-         * @var DatabaseConnection
+         * @var \TCCL\Database\DatabaseConnection
          */
         'conn' => null,
 
@@ -77,13 +77,22 @@ abstract class Entity {
         'updates' => null,
 
         /**
-         * The set of filters to apply (if any) to values fetched from the
-         * database. This is an associative array mapping field names to
-         * callables.
+         * The set of callbacks to apply to map query result values to their
+         * field value during sync. This is an associative array mapping field
+         * names to callables.
          *
          * @var array
          */
-        'filters' => null,
+        'syncFn' => null,
+
+        /**
+         * The set of callbacks to apply to map field values to their query
+         * values during commit. This is an associative array mapping field
+         * names to callables.
+         *
+         * @var array
+         */
+        'commitFn' => null,
 
         /**
          * Determines whether the fields have been fetched. Typically this is
@@ -246,7 +255,8 @@ abstract class Entity {
      * @param array $fields
      *  The associative array of fields for the entity. This is cross-referenced
      *  for keys meaning any keys that exist in $fields but weren't registered
-     *  are ignored. Both table field names and aliases are allowed.
+     *  are ignored. Both field names and property names are allowed. When both
+     *  are provided, the property name is preferred.
      * @param bool $synchronized
      *  If true, then the field values are assumed to already be synchronized
      *  with the database backend. Otherwise updates are queued for a later
@@ -263,29 +273,39 @@ abstract class Entity {
             $this->__info['create'] = false;
         }
 
-        $apply = [];
+        // Prefer props over field names in case there are duplicates.
+        foreach (array_keys($fields) as $name) {
+            if (isset($this->__info['props'][$name])
+                && $this->__info['props'][$name] != $name)
+            {
+                unset($fields[$this->__info['props'][$name]]);
+            }
+        }
 
-        foreach ($fields as $key => $value) {
-            // Set key value if found.
-            if (array_key_exists($key,$this->__info['keys'])) {
-                $this->__info['keys'][$key] = $value;
+        // Gather values to apply to the entity.
+
+        $apply = [];
+        $fn = $this->makeApplyFn('syncFn');
+
+        foreach ($fields as $name => $value) {
+            // See if the name is actually a distinct property name. If so then
+            // map it to its corresponding field name.
+            if (isset($this->__info['props'][$name])) {
+                $name = $this->__info['props'][$name];
             }
 
-            // See if the key is a property name. If so then map it to its
-            // corresponding field name.
-            if (isset($this->__info['props'][$key])) {
-                $key = $this->__info['props'][$key];
+            // Map value from database variant to field variant.
+            $fn($value,$name);
+
+            // Set the value under 'keys' bucket if the field is registered as a
+            // key.
+            if (array_key_exists($name,$this->__info['keys'])) {
+                $this->__info['keys'][$name] = $value;
             }
 
             // Set field value if found.
-            if (array_key_exists($key,$this->__info['fields'])) {
-                // See if we can first filter the value. Only filter non-null
-                // values.
-                if (isset($this->__info['filters'][$key],$value)) {
-                    $value = $this->__info['filters'][$key]($value);
-                }
-
-                $apply[$key] = $value;
+            if (array_key_exists($name,$this->__info['fields'])) {
+                $apply[$name] = $value;
             }
         }
 
@@ -351,6 +371,8 @@ abstract class Entity {
             return false;
         }
 
+        $fieldNames = $this->getDirtyFields($values);
+
         if ($this->__info['create']) {
             // NOTE: If update-only is flagged or if there are no inserts to
             // process, postCommit() hook is not called because a commit is
@@ -361,8 +383,7 @@ abstract class Entity {
                 return false;
             }
 
-            // Get dirty fields to insert information.
-            $fieldNames = $this->getDirtyFields($values);
+            // Check if we have fields to update.
             if ($fieldNames === false) {
                 $this->rollback();
                 return false;
@@ -374,8 +395,6 @@ abstract class Entity {
             $query = "INSERT INTO `{$this->__info['table']}` ($fields) VALUES ($prep)";
         }
         else {
-            $fieldNames = $this->getDirtyFields($values);
-
             // Abort operation if no updates are available. We still invoke the
             // postCommit() hook since the commit is semantically correct but
             // just empty.
@@ -393,9 +412,12 @@ abstract class Entity {
                 return true;
             }
 
-            // Process the set of updates and prepared values for the query.
-            $keyCondition = $this->getKeyString($keyvals);
+            // Process the set of updates and prepared values for the
+            // query. Augment values and field names so values from key fragment
+            // are processed.
+            $keyCondition = $this->getKeyString($keyvals,$keynames);
             $values = array_merge($values,$keyvals);
+            $fieldNames = array_merge($fieldNames,$keynames);
 
             // Build the query.
             $fields = implode(',',array_map(function($x){ return "`$x` = ?"; },
@@ -403,11 +425,9 @@ abstract class Entity {
             $query = "UPDATE `{$this->__info['table']}` SET $fields WHERE $keyCondition LIMIT 1";
         }
 
-        // Allow derived classes to modify field values before commit through
-        // Entity::processCommitFields().
-        for ($i = 0;$i < count($fieldNames);++$i) {
-            $processing[$fieldNames[$i]] =& $values[$i];
-        }
+        // Process query values before commit . Allow derived classes to modify
+        // query values before commit through Entity::processCommitFields().
+        $processing = $this->applyFnEx('commitFn',$values,$fieldNames);
         $this->processCommitFields($processing);
 
         // Perform the query.
@@ -510,7 +530,9 @@ abstract class Entity {
     final public function sync() {
         if (!$this->__info['fetchState']) {
             $values = [];
-            $query = $this->getFetchQuery($values);
+            $fieldNames = [];
+            $query = $this->getFetchQuery($values,$fieldNames);
+            $this->applyFnEx('commitFn',$values,$fieldNames);
             $stmt = $this->__info['conn']->query($query,$values);
 
             $newfields = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -530,6 +552,9 @@ abstract class Entity {
                 // Update fields with new fetch results. (This sets state to
                 // exists.)
                 $this->setFields($newfields);
+
+                // Allow derived functionality to execute after sync.
+                $this->postSync();
             }
         }
     }
@@ -627,11 +652,20 @@ abstract class Entity {
      *  property name will be the same as the database field name.
      * @param mixed $default
      *  The default value to use for the property.
-     * @param callable $filter
-     *  If a callable, then the field is filtered through the callback when it
-     *  is read. This does not effect the value when it is committed.
+     * @param ?callable $syncFn
+     *  Optional callable for mapping database values to field values during
+     *  sync. (This used to be called 'filter' and serves the same purpose.)
+     * @param ?callable $commitFn
+     *  Optional callable for mapping field values to database values during
+     *  commit.
      */
-    final protected function registerField($field,$propertyName = null,$default = null,$filter = null) {
+    final protected function registerField(
+        $field,
+        $propertyName = null,
+        $default = null,
+        $syncFn = null,
+        $commitFn = null)
+    {
         if (empty($propertyName)) {
             $propertyName = $field;
         }
@@ -642,8 +676,11 @@ abstract class Entity {
 
         $this->__info['fields'][$field] = $default;
         $this->__info['props'][$propertyName] = $field;
-        if (is_callable($filter)) {
-            $this->__info['filters'][$field] = $filter;
+        if (is_callable($syncFn)) {
+            $this->__info['syncFn'][$field] = $syncFn;
+        }
+        if (is_callable($commitFn)) {
+            $this->__info['commitFn'][$field] = $commitFn;
         }
     }
 
@@ -655,28 +692,43 @@ abstract class Entity {
      *   - field_name
      *   - prop_name
      *   - default_value
-     *   - filter
+     *   - filter (deprecated; same as 'syncFn')
+     *   - syncFn
+     *   - commitFn
      */
     final protected function registerAllFields(array $fields) {
         foreach ($fields as $fieldInfo) {
             $fieldInfo += [
                 'prop_name' => null,
                 'default_value' => null,
-                'filter' => null,
+                'syncFn' => null,
+                'commitFn' => null,
             ];
+
+            if (!isset($fieldInfo['syncFn']) && isset($fieldInfo['filter'])) {
+                $fieldInfo['syncFn'] = $fieldInfo['filter'];
+            }
 
             $this->registerField(
                 $fieldInfo['field_name'],
                 $fieldInfo['prop_name'],
                 $fieldInfo['default_value'],
-                $fieldInfo['filter']);
+                $fieldInfo['syncFn'],
+                $fieldInfo['commitFn']
+            );
         }
     }
 
-    final protected function setFieldInfo(array $fields,array $props,array $filters) {
+    final protected function setFieldInfo(
+        array $fields,
+        array $props,
+        array $syncFns,
+        array $commitFns = [])
+    {
         $this->__info['fields'] = $fields;
         $this->__info['props'] = $props;
-        $this->__info['filters'] = $filters;
+        $this->__info['syncFn'] = $syncFns;
+        $this->__info['commitFn'] = $commitFns;
     }
 
     final protected function getKeys() {
@@ -692,19 +744,33 @@ abstract class Entity {
      * query. This is just a convenience wrapper.
      *
      * @param array &$values
-     *  The list of values for the key expression.
+     *  Returns the query values required for the fragment.
+     * @param array &$fields
+     *  Returns the ordered set of field names corresponding with the values in
+     *  the $values array.
+     * @param string $tableAlias
+     *  Optional alias for table.
      *
      * @return string
      */
-    final protected function getKeyString(&$values,$tableAlias = null) {
+    final protected function getKeyString(&$values,&$fields,$tableAlias = null) {
         if (!isset($tableAlias)) {
             $tableAlias = $this->__info['table'];
         }
 
         $keys = array_keys($this->__info['keys']);
-        $query = implode(' AND ', array_map(function($x) use($tableAlias) {
-            return "`{$tableAlias}`.`$x` = ?";
-        }, $keys));
+
+        $query = implode(
+            ' AND ',
+            array_map(
+                function($x) use($tableAlias) {
+                    return "`{$tableAlias}`.`$x` = ?";
+                },
+                $keys
+            )
+        );
+
+        $fields = array_keys($this->__info['keys']);
         $values = array_values($this->__info['keys']);
 
         return $query;
@@ -794,19 +860,24 @@ abstract class Entity {
 
     /**
      * Gets the query used to fetch the entity fields. This may be overridden by
-     * derived classes to handle more complicated entity types.
+     * derived classes to handle more complicated entity types. A fetch query
+     * always uses positional prepared parameters.
      *
      * @param array &$values
-     *  The array of variables for the query statement.
+     *  Returns the values required for the query.
+     * @param array &$fields
+     *  Returns the ordered set of field names corresponding with the values in
+     *  the $values array.
      *
      * @return string
      *  The query string
      */
-    protected function getFetchQuery(array &$values) {
-        $keyCondition = $this->getKeyString($values);
-        $fields = $this->getFieldString();
+    protected function getFetchQuery(array &$values,array &$fields) {
+        $keyCondition = $this->getKeyString($values,$fields);
+        $fieldNames = $this->getFieldString();
 
-        $query = "SELECT $fields FROM `{$this->__info['table']}` WHERE $keyCondition LIMIT 1";
+        $query = "SELECT $fieldNames FROM `{$this->__info['table']}` WHERE $keyCondition LIMIT 1";
+
         return $query;
     }
 
@@ -876,6 +947,14 @@ abstract class Entity {
     }
 
     /**
+     * Invoked when the entity has been successfully synced. The default
+     * implementation has nothing to do.
+     */
+    protected function postSync() {
+
+    }
+
+    /**
      * Called when a commit() fails.
      */
     private function rollback() {
@@ -895,5 +974,31 @@ abstract class Entity {
         $this->__info['fetchState'] = !$invalidate;
         $this->__info['existsState'] = true;
         $this->__info['create'] = false;
+    }
+
+    private function makeApplyfn($bucket) {
+        return function(&$value,$name) use($bucket) {
+            if (isset($this->__info[$bucket][$name])) {
+                $fn = $this->__info[$bucket][$name];
+                assert(is_callable($fn));
+
+                $value = $fn($value);
+            }
+        };
+    }
+
+    private function applyFn($bucket,array &$values) {
+        array_walk($values,$this->makeApplyfn($bucket));
+    }
+
+    private function applyFnEx($bucket,array &$values,array $fieldNames) {
+        $map = [];
+        for ($i = 0;$i < count($fieldNames);++$i) {
+            $map[$fieldNames[$i]] =& $values[$i];
+        }
+
+        array_walk($map,$this->makeApplyFn($bucket));
+
+        return $map;
     }
 }
