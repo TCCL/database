@@ -442,7 +442,6 @@ abstract class Entity {
             // are processed.
             $keyCondition = $this->getKeyString($keyvals,$keynames);
             $values = array_merge($values,$keyvals);
-            $fieldNames = array_merge($fieldNames,$keynames);
 
             // Build the query.
             $fields = implode(',',array_map(function($x){ return "`$x` = ?"; },
