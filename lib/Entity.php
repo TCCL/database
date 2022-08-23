@@ -1003,6 +1003,10 @@ abstract class Entity {
 
     private function makeApplyfn($bucket) {
         return function(&$value,$name) use($bucket) {
+            if (is_null($value)) {
+                return null;
+            }
+
             if (isset($this->__info[$bucket][$name])) {
                 $fn = $this->__info[$bucket][$name];
                 assert(is_callable($fn));
