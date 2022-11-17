@@ -437,16 +437,15 @@ abstract class Entity {
                 return true;
             }
 
-            // Process the set of updates and prepared values for the
-            // query. Augment values and field names so values from key fragment
-            // are processed.
-            $keyCondition = $this->getKeyString($keyvals,$keynames);
-            $values = array_merge($values,$keyvals);
-
             // Build the query.
+            $keyCondition = $this->getKeyString($keyvals,$keynames);
             $fields = implode(',',array_map(function($x){ return "`$x` = ?"; },
                                             $fieldNames));
             $query = "UPDATE `{$this->__info['table']}` SET $fields WHERE $keyCondition LIMIT 1";
+
+            // Augment values and field name lists with key values.
+            $values = array_merge($values,$keyvals);
+            $fieldNames = array_merge($fieldNames,$keynames);
         }
 
         // Process query values before commit . Allow derived classes to modify
