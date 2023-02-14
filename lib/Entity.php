@@ -433,7 +433,7 @@ abstract class Entity {
                 }
 
                 // Succeed with no direct changes.
-                $this->__info['conn']->endTransaction();
+                $this->__info['conn']->commit();
                 return true;
             }
 
@@ -483,7 +483,7 @@ abstract class Entity {
                     }
 
                     // Attempt to create the entity recursively. This will
-                    // handle any endTransaction(), commitSuccess() and/or
+                    // handle any commit(), commitSuccess() and/or
                     // rollback() calls.
                     $this->__info['create'] = true;
                     return $this->commit($invalidate,true);
@@ -502,7 +502,7 @@ abstract class Entity {
                     return false;
                 }
 
-                $this->__info['conn']->endTransaction();
+                $this->__info['conn']->commit();
 
                 return true;
             }
@@ -540,10 +540,32 @@ abstract class Entity {
             return false;
         }
 
-        $this->__info['conn']->endTransaction();
+        $this->__info['conn']->commit();
         unset($this->__info['updates']);
 
         return true;
+    }
+
+    /**
+     * Deletes the entity record.
+     */
+    public function delete() {
+        $this->__info['conn']->beginTransaction();
+
+        // Build the query.
+        $keyCondition = $this->getKeyString($keyValues,$keyNames);
+        $query = "DELETE FROM `{$this->__info['table']}` WHERE $keyCondition";
+
+        // Perform the query.
+        try {
+            $stmt = $this->__info['conn']->query($query,$keyValues);
+        } catch (\Exception $ex) {
+            $this->rollback();
+            throw $ex;
+        }
+
+        $this->__info['conn']->commit();
+        $this->invalidate(true);
     }
 
     /**
@@ -585,6 +607,10 @@ abstract class Entity {
     /**
      * Invalidates the Entity object to where all fields will be re-fetched at
      * next access.
+     *
+     * @param bool $deleted
+     *  If true, the object is invalidated in such a way that it can be used
+     *  again for a new entity. This is useful to call for a deleted object.
      */
     public function invalidate($deleted = false) {
         $this->__info['existsState'] = false;
