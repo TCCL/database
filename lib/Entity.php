@@ -576,7 +576,7 @@ abstract class Entity {
         if (!$this->__info['fetchState']) {
             $values = [];
             $fieldNames = [];
-            $query = $this->getFetchQuery($values,$fieldNames);
+            $query = $this->getFetchQueryEx($values,$fieldNames);
             $this->applyFnEx('commitFn',$values,$fieldNames);
             $stmt = $this->__info['conn']->query($query,$values);
 
@@ -802,7 +802,7 @@ abstract class Entity {
      *
      * @return string
      */
-    final protected function getKeyString(&$values,&$fields,$tableAlias = null) {
+    final protected function getKeyString(&$values,&$fields = null,$tableAlias = null) {
         if (!isset($tableAlias)) {
             $tableAlias = $this->__info['table'];
         }
@@ -914,6 +914,28 @@ abstract class Entity {
      *
      * @param array &$values
      *  Returns the values required for the query.
+     *
+     * @return string
+     *  The query string
+     */
+    protected function getFetchQuery(array &$values) {
+        $keyCondition = $this->getKeyString($values,$fields);
+        $fieldNames = $this->getFieldString();
+
+        $query = "SELECT $fieldNames FROM `{$this->__info['table']}` WHERE $keyCondition LIMIT 1";
+
+        return $query;
+    }
+
+    /**
+     * Gets the query used to fetch the entity fields. This may be overridden by
+     * derived classes to handle more complicated entity types. A fetch query
+     * always uses positional prepared parameters.
+     *
+     * Note: This variant is a transition for version 2.
+     *
+     * @param array &$values
+     *  Returns the values required for the query.
      * @param array &$fields
      *  Returns the ordered set of field names corresponding with the values in
      *  the $values array.
@@ -921,12 +943,9 @@ abstract class Entity {
      * @return string
      *  The query string
      */
-    protected function getFetchQuery(array &$values,array &$fields) {
-        $keyCondition = $this->getKeyString($values,$fields);
-        $fieldNames = $this->getFieldString();
-
-        $query = "SELECT $fieldNames FROM `{$this->__info['table']}` WHERE $keyCondition LIMIT 1";
-
+    protected function getFetchQueryEx(array &$values,array &$fields) {
+        $query = $this->getFetchQuery($values);
+        $fields = array_keys($this->__info['keys']);
         return $query;
     }
 
