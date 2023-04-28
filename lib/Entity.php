@@ -438,7 +438,7 @@ abstract class Entity {
             }
 
             // Build the query.
-            $keyCondition = $this->getKeyString($keyvals,$keynames);
+            $keyCondition = $this->getKeyStringEx($keyvals,$keynames);
             $fields = implode(',',array_map(function($x){ return "`$x` = ?"; },
                                             $fieldNames));
             $query = "UPDATE `{$this->__info['table']}` SET $fields WHERE $keyCondition LIMIT 1";
@@ -553,7 +553,7 @@ abstract class Entity {
         $this->__info['conn']->beginTransaction();
 
         // Build the query.
-        $keyCondition = $this->getKeyString($keyValues,$keyNames);
+        $keyCondition = $this->getKeyStringEx($keyValues,$keyNames);
         $query = "DELETE FROM `{$this->__info['table']}` WHERE $keyCondition";
 
         // Perform the query.
@@ -794,15 +794,12 @@ abstract class Entity {
      *
      * @param array &$values
      *  Returns the query values required for the fragment.
-     * @param array &$fields
-     *  Returns the ordered set of field names corresponding with the values in
-     *  the $values array.
      * @param string $tableAlias
      *  Optional alias for table.
      *
      * @return string
      */
-    final protected function getKeyString(&$values,&$fields = null,$tableAlias = null) {
+    final protected function getKeyString(&$values,$tableAlias = null) {
         if (!isset($tableAlias)) {
             $tableAlias = $this->__info['table'];
         }
@@ -819,10 +816,28 @@ abstract class Entity {
             )
         );
 
-        $fields = array_keys($this->__info['keys']);
         $values = array_values($this->__info['keys']);
 
         return $query;
+    }
+
+    /**
+     * Gets the string representing the WHERE key bind condition in the SQL
+     * query. This is just a convenience wrapper.
+     *
+     * @param array &$values
+     *  Returns the query values required for the fragment.
+     * @param array &$fields
+     *  Returns the ordered set of field names corresponding with the values in
+     *  the $values array.
+     * @param string $tableAlias
+     *  Optional alias for table.
+     *
+     * @return string
+     */
+    final protected function getKeyStringEx(&$values,&$fields = null,$tableAlias = null) {
+        $fields = array_keys($this->__info['keys']);
+        return $this->getKeyString($values,$tableAlias);
     }
 
     /**
@@ -919,7 +934,7 @@ abstract class Entity {
      *  The query string
      */
     protected function getFetchQuery(array &$values) {
-        $keyCondition = $this->getKeyString($values,$fields);
+        $keyCondition = $this->getKeyStringEx($values,$fields);
         $fieldNames = $this->getFieldString();
 
         $query = "SELECT $fieldNames FROM `{$this->__info['table']}` WHERE $keyCondition LIMIT 1";
