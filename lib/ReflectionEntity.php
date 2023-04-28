@@ -25,7 +25,6 @@ abstract class ReflectionEntity extends Entity {
      *   - fields
      *   - props
      *   - syncFn
-     *   - filters (deprecated; same as 'syncFn')
      *   - commitFn
      *   - keys
      */
@@ -445,7 +444,8 @@ abstract class ReflectionEntity extends Entity {
         // Merge field metadata.
         $schema['fields'] += $with['fields'];
         $schema['props'] += $with['props'];
-        $schema['filters'] += $with['filters'];
+        $schema['syncFn'] += $with['syncFn'];
+        $schema['commitFn'] += $with['commitFn'];
         $schema['keys'] += $with['keys'];
 
         return $schema;
