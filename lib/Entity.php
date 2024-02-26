@@ -9,7 +9,6 @@
 namespace TCCL\Database;
 
 use PDO;
-use Exception;
 
 /**
  * Entity
@@ -448,7 +447,7 @@ abstract class Entity {
             $fieldNames = array_merge($fieldNames,$keynames);
         }
 
-        // Process query values before commit . Allow derived classes to modify
+        // Process query values before commit. Allow derived classes to modify
         // query values before commit through Entity::processCommitFields().
         $processing = $this->applyFnEx('commitFn',$values,$fieldNames);
         $this->processCommitFields($processing);
@@ -556,9 +555,12 @@ abstract class Entity {
         $keyCondition = $this->getKeyStringEx($keyValues,$keyNames);
         $query = "DELETE FROM `{$this->__info['table']}` WHERE $keyCondition";
 
+        // Convert the key values to storage representation via commitFn.
+        $this->applyFnEx('commitFn',$keyValues,$keyNames);
+
         // Perform the query.
         try {
-            $stmt = $this->__info['conn']->query($query,$keyValues);
+            $this->__info['conn']->query($query,$keyValues);
         } catch (\Exception $ex) {
             $this->rollback();
             throw $ex;
