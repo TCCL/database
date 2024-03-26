@@ -234,6 +234,7 @@ class DatabaseConnection {
         // Extract arguments and create PDO.
         @list($dsn,$user,$passwd,$options) = $bucket;
         $pdo = new PDO($dsn,$user,$passwd,$options);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_SILENT);
 
         // Store connection in map and assign.
         self::$pdomap[$this->key] = $pdo;
