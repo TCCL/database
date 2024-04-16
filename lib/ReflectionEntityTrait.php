@@ -3,7 +3,7 @@
 /**
  * ReflectionEntityTrait.php
  *
- * tccl/database
+ * @package tccl\database
  */
 
 namespace TCCL\Database;
@@ -17,14 +17,21 @@ trait ReflectionEntityTrait {
     private $__reverseProps;
 
     /**
-     * Initializes the trait's state.
+     * Implements ReflectionEntity::initialize in a standard way.
+     *
+     * @param array $schema
+     *  The ReflectionEntity schema for this instance.
+     *
+     * @return array
+     *  Returns an associative array denoting the entity keys to use in the
+     *  Entity class constructor call.
      */
-    protected function initialize(array $entry) {
-        $this->__reverseProps = array_flip($entry['props']);
+    protected function initialize(array $schema) {
+        $this->__reverseProps = array_flip($schema['props']);
 
         // Lookup key values on object properties.
-        $keys = array_fill_keys($entry['keys'],null);
-        foreach ($entry['keys'] as $key) {
+        $keys = array_fill_keys($schema['keys'],null);
+        foreach ($schema['keys'] as $key) {
             $prop = $this->__reverseProps[$key];
             $keys[$key] = $this->$prop;
         }

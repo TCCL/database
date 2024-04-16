@@ -3,11 +3,12 @@
 /**
  * ReflectionEntity
  *
- * tccl/database
+ * @package tccl\database
  */
 
 namespace TCCL\Database;
 
+use Exception;
 use ReflectionClass;
 
 /**
@@ -33,6 +34,7 @@ abstract class ReflectionEntity extends Entity {
         $schema = self::loadSchema(static::class);
 
         if ($schema === false) {
+            $class = static::class;
             trigger_error(
                 "ReflectionEntity: Schema metadata could not be loaded for class '$class' or any parent class",
                 E_USER_ERROR
@@ -322,6 +324,7 @@ abstract class ReflectionEntity extends Entity {
         if (isset($table)) {
             $schema['table'] = $table;
         }
+
         $initialKeys = $this->initialize($schema);
         if (!is_array($keys) || empty($keys)) {
             $keys = $initialKeys;
@@ -352,6 +355,21 @@ abstract class ReflectionEntity extends Entity {
     public function __isset($name) {
         return false;
     }
+
+    /**
+     * Initializes the ReflectionEntity for use.
+     *
+     * This functionality must be called by a derived class or trait so that
+     * private properties can be accessed.
+     *
+     * @param array $schema
+     *  The ReflectionEntity schema for this instance.
+     *
+     * @return array
+     *  Returns an associative array denoting the entity keys to use in the
+     *  Entity class constructor call.
+     */
+    abstract protected function initialize(array $schema);
 
     private static function loadSchema($className) {
         // Handle base cases (this function is called recursively).
