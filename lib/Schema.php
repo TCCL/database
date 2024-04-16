@@ -3,7 +3,7 @@
 /**
  * Schema.php
  *
- * tccl/database
+ * @package tccl\database
  */
 
 namespace TCCL\Database;
@@ -63,7 +63,7 @@ class Schema implements ArrayAccess, Iterator, Countable {
      *  The name to filter.
      *
      * @return string
-     *  
+     *
      */
     public static function filterName($name) {
         return "`$name`";
@@ -121,7 +121,7 @@ class Schema implements ArrayAccess, Iterator, Countable {
     /**
      * Implements ArrayAccess::offsetExists().
      */
-    public function offsetExists($offset) {
+    public function offsetExists($offset) : bool {
         return isset($this->schema[$offset]);
     }
 
@@ -135,14 +135,14 @@ class Schema implements ArrayAccess, Iterator, Countable {
     /**
      * Implements ArrayAccess::offsetSet().
      */
-    public function offsetSet($offset,$value) {
+    public function offsetSet($offset,$value) : void {
         $this->schema[$offset] = $value;
     }
 
     /**
      * Implements ArrayAccess::offsetUnset().
      */
-    public function offsetUnset($offset) {
+    public function offsetUnset($offset) : void {
         unset($this->schema[$offset]);
     }
 
@@ -163,28 +163,28 @@ class Schema implements ArrayAccess, Iterator, Countable {
     /**
      * Implements Iterator::next().
      */
-    public function next() {
+    public function next() : void {
         next($this->schema);
     }
 
     /**
      * Implements Iterator::rewind().
      */
-    public function rewind() {
+    public function rewind() : void {
         reset($this->schema);
     }
 
     /**
      * Implements Iterator::valid().
      */
-    public function valid() {
+    public function valid() : bool {
         return !is_null(key($this->schema));
     }
 
     /**
      * Implements Countable::count().
      */
-    public function count() {
+    public function count() : int {
         return count($this->schema);
     }
 
