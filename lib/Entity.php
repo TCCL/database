@@ -3,7 +3,7 @@
 /**
  * Entity.php
  *
- * tccl/database
+ * @package tccl\database
  */
 
 namespace TCCL\Database;
@@ -206,7 +206,7 @@ abstract class Entity {
     /**
      * Gets the database connection instance.
      *
-     * @return DatabaseConnection
+     * @return \TCCL\Database\DatabaseConnection
      */
     final public function getConnection() {
         return $this->__info['conn'];
@@ -656,7 +656,7 @@ abstract class Entity {
      * Creates a new Entity instance. This must be called by derived classes in
      * order for the object to function properly.
      *
-     * @param DatabaseConnection $conn
+     * @param \TCCL\Database\DatabaseConnection $conn
      *  The database connection object to use when making queries for the
      *  entity.
      * @param string $table

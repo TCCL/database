@@ -310,7 +310,7 @@ abstract class ReflectionEntity extends Entity {
     /**
      * Creates a new ReflectionEntity instance.
      *
-     * @param DatabaseConnection $conn
+     * @param \TCCL\Database\DatabaseConnection $conn
      *  Database connection to employ.
      * @param string $table
      *  An override table name that replaces the default provided in the doc

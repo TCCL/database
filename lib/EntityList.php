@@ -3,7 +3,7 @@
 /**
  * EntityList.php
  *
- * tccl/database
+ * @package tccl\database
  */
 
 namespace TCCL\Database;
@@ -40,7 +40,7 @@ abstract class EntityList {
      * Creates a new EntityList instance. Optional parameters can be read from
      * doc comments if not provided directly.
      *
-     * @param DatabaseConnection $conn
+     * @param \TCCL\Database\DatabaseConnection $conn
      *  The database connection instance to use.
      * @param string $table
      *  The name of the table that stores the entities.
@@ -275,7 +275,7 @@ abstract class EntityList {
      *  or updated. Otherwise the operation just assumes the entry is to be
      *  inserted.
      *
-     * @return stdClass
+     * @return \stdClass
      *  Returns a tracking object.
      */
     public function addItemWithKey($key,array $payload,$override = false) {
@@ -308,7 +308,7 @@ abstract class EntityList {
      * @param array $payload
      *  List of fields to update; this can be a subset of the total fields.
      *
-     * @return stdClass
+     * @return \stdClass
      *  Returns a tracking object.
      */
     public function updateItem($key,array $payload) {
@@ -563,7 +563,7 @@ abstract class EntityList {
      *  The set of items to delete; this is an associative array having keys
      *  corresponding to each entity key in the set. Note that this list is
      *  always guarenteed to be non-empty.
-     * @param DatabaseConnection $conn
+     * @param \TCCL\Database\DatabaseConnection $conn
      *  The database connection associated with the EntityList.
      * @param string $table
      *  The table that stores the list entities.

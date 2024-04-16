@@ -8,7 +8,6 @@
 
 namespace TCCL\Database;
 
-use PDO;
 use Exception;
 use ArrayAccess;
 use Iterator;
@@ -38,14 +37,14 @@ class EntityInsertSet implements ArrayAccess, Iterator, Countable {
     /**
      * The database connection instance to use.
      *
-     * @var DatabaseConnection
+     * @var \TCCL\Database\DatabaseConnection
      */
     private $conn;
 
     /**
      * Creates a new EntityInsertSet instance.
      *
-     * @param DatabaseConnection $conn
+     * @param \TCCL\Database\DatabaseConnection $conn
      *  The database connection instance to user.
      * @param array $ents
      *  An optional list of Entity objects to serve as the initial set.

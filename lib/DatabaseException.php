@@ -3,7 +3,7 @@
 /**
  * DatabaseException.php
  *
- * tccl/database
+ * @package tccl\database
  */
 
 namespace TCCL\Database;
@@ -50,7 +50,7 @@ class DatabaseException extends Exception {
      *
      * @return bool
      */
-    public function isDuplicateEntry() {
+    public function isDuplicateEntry() : bool {
         return $this->getCode() == self::MYSQL_ERROR_DUP_ENTRY;
     }
 
@@ -60,7 +60,7 @@ class DatabaseException extends Exception {
      *
      * @return bool
      */
-    public function isFailedForeignKeyConstraint() {
+    public function isFailedForeignKeyConstraint() : bool {
         return $this->getCode() == self::MYSQL_ERROR_FAILED_FOREIGN_CONSTRAINT;
     }
 }
