@@ -3,18 +3,19 @@
 /**
  * DatabaseConnection.php
  *
- * tccl/database
+ * @package tccl\database
  */
 
 namespace TCCL\Database;
 
 use PDO;
 use Exception;
+use PDOStatement;
 
 /**
- * DatabaseConnection
+ * Represents a database connection.
  *
- * Represents a database connection. This provides a simple wrapper above PDO.
+ * This class provides a simple wrapper above PDO.
  */
 class DatabaseConnection {
     /**
@@ -43,33 +44,45 @@ class DatabaseConnection {
      * Initializes the backing PDO object. All parameters are forwarded to the
      * PDO constructor.
      *
-     * @param variable... $keys
+     * @param string $keys,...
      *  The parameters indicate keys within the GLOBALS array that store
      *  database credentials. The keyed element must be an indexed array
      *  containing the arguments to the PDO constructor (in the correct order).
      */
-    public function __construct(/* $keys ... */) {
-        $keys = func_get_args();
-        if (count($keys) < 1) {
-            throw new Exception(
-                __METHOD__.': list of keys must contain at least 1 key');
-        }
-        $this->key = implode(':',$keys);
+    public function __construct(string ...$keys) {
+        $this->setConnection(...$keys);
+    }
 
-        if (!isset(self::$pdomap[$this->key])) {
+    /**
+     * Apply a PDO connection to the DatabaseConnection instance.
+     *
+     * @param string $keys,...
+     *  The parameters indicate keys within the GLOBALS array that store
+     *  database credentials. The keyed element must be an indexed array
+     *  containing the arguments to the PDO constructor (in the correct order).
+     */
+    public function setConnection(string ...$keys) : void {
+        if (count($keys) < 1) {
+            throw new Exception('Keys cannot be empty');
+        }
+        $key = implode(':',$keys);
+
+        if (!isset(self::$pdomap[$key])) {
             // Find the bucket based on the subkeys.
             $bucket = $GLOBALS;
             foreach ($keys as $k) {
                 if (!isset($bucket[$k])) {
-                    throw new Exception(
-                        __METHOD__.": could not locate key '$k' under globals path");
+                    throw new Exception("Could not locate key '$k' under globals path");
                 }
+
                 $bucket = $bucket[$k];
             }
 
-            self::$pdomap[$this->key] = $bucket;
-            self::$transactionCounters[$this->key] = 0;
+            self::$pdomap[$key] = $bucket;
+            self::$transactionCounters[$key] = 0;
         }
+
+        $this->key = $key;
     }
 
     /**
@@ -79,7 +92,7 @@ class DatabaseConnection {
      *
      * @param string $query
      *  The query, using prepared statement annotations as needed
-     * @param mixed... $args
+     * @param mixed $args,...
      *  If this argument is an array, then the array contents are treated as the
      *  parameters to the prepared statement, and any subsequent arguments are
      *  ignored. If this argument is a scalar, then it and any subsequent
@@ -87,11 +100,11 @@ class DatabaseConnection {
      *  argument is null, then it is ignored and this method behaves just like
      *  rawQuery().
      *
-     * @return PDOStatement
+     * @return \PDOStatement
      *  The PDOStatement representing the prepared statement; NOTE: the
      *  statement will have already been executed.
      */
-    public function query($query,$args = null) {
+    public function query($query,$args = null) : PDOStatement {
         if (is_array($args)) {
             // If the 'args' argument is an array, then use its contents as
             // parameters to the prepared statement.
@@ -135,9 +148,9 @@ class DatabaseConnection {
      * @param string $query
      *  The SQL query
      *
-     * @return PDOStatement
+     * @return \PDOStatement
      */
-    public function rawQuery($query) {
+    public function rawQuery($query) : PDOStatement {
         $stmt = $this->pdo()->query($query);
         if ($stmt === false) {
             throw new DatabaseException($this->pdo());
@@ -152,9 +165,9 @@ class DatabaseConnection {
      * @param string $query
      *  The SQL string
      *
-     * @return PDOStatement
+     * @return \PDOStatement
      */
-    public function prepare($query) {
+    public function prepare($query) : PDOStatement {
         $stmt = $this->pdo()->prepare($query);
         if ($stmt === false) {
             throw new DatabaseException($this->pdo());
@@ -166,9 +179,9 @@ class DatabaseConnection {
     /**
      * Gets the underlying PDO backing object.
      *
-     * @return PDO
+     * @return \PDO
      */
-    public function getPDO() {
+    public function getPDO() : PDO {
         return $this->pdo();
     }
 
@@ -222,9 +235,9 @@ class DatabaseConnection {
     /**
      * Gets the PDO object for this instance.
      *
-     * @return PDO
+     * @return \PDO
      */
-    private function pdo() {
+    private function pdo() : PDO {
         if (is_object(self::$pdomap[$this->key])) {
             return self::$pdomap[$this->key];
         }
